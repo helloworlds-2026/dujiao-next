@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -69,10 +68,8 @@ func (s *PaymentService) HandlePaypalWebhook(input WebhookCallbackInput) (*model
 		"event_id", event.ID,
 	)
 
-	ctx := input.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx, cancel := detachOutboundRequestContext(input.Context)
+	defer cancel()
 	headers := make(http.Header)
 	for key, value := range input.Headers {
 		headers.Set(key, value)
@@ -221,10 +218,8 @@ func (s *PaymentService) HandleWechatWebhook(input WebhookCallbackInput) (*model
 		"channel_id", input.ChannelID,
 		"body_size", len(input.Body),
 	)
-	ctx := input.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	ctx, cancel := detachOutboundRequestContext(input.Context)
+	defer cancel()
 
 	candidates, err := s.resolveWechatWebhookChannels(input.ChannelID)
 	if err != nil {
@@ -331,11 +326,6 @@ func (s *PaymentService) HandleStripeWebhook(input WebhookCallbackInput) (*model
 		"channel_id", input.ChannelID,
 		"body_size", len(input.Body),
 	)
-	ctx := input.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	candidates, err := s.resolveStripeWebhookChannels(input.ChannelID)
 	if err != nil {
 		log.Warnw("payment_webhook_resolve_channels_failed", "error", err)

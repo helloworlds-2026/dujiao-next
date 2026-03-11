@@ -154,7 +154,9 @@ func (s *NotificationService) SendTest(ctx context.Context, input NotificationTe
 		}
 		return s.emailService.SendCustomEmail(target, title, body)
 	case "telegram":
-		return s.telegramSender.SendMessage(ctx, target, composeTelegramMessage(title, body))
+		gatewayCtx, cancel := detachOutboundRequestContext(ctx)
+		defer cancel()
+		return s.telegramSender.SendMessage(gatewayCtx, target, composeTelegramMessage(title, body))
 	default:
 		return ErrNotificationConfigInvalid
 	}

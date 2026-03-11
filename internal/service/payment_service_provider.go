@@ -23,7 +23,7 @@ import (
 func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *models.Order, channel *models.PaymentChannel, payment *models.Payment) (err error) {
 	providerType := strings.ToLower(strings.TrimSpace(channel.ProviderType))
 	channelType := strings.ToLower(strings.TrimSpace(channel.ChannelType))
-	gatewayCtx, cancel := detachPaymentGatewayContext(input.Context)
+	gatewayCtx, cancel := detachOutboundRequestContext(input.Context)
 	defer cancel()
 	log := paymentLogger(
 		"order_id", order.ID,

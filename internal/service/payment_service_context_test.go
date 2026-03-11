@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-func TestDetachPaymentGatewayContextIgnoresParentCancel(t *testing.T) {
+func TestDetachOutboundRequestContextIgnoresParentCancel(t *testing.T) {
 	type contextKey string
 
 	parent, parentCancel := context.WithCancel(context.WithValue(context.Background(), contextKey("trace_id"), "trace-001"))
 	parentCancel()
 
-	ctx, cancel := detachPaymentGatewayContext(parent)
+	ctx, cancel := detachOutboundRequestContext(parent)
 	defer cancel()
 
 	if err := ctx.Err(); err != nil {

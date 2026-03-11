@@ -67,7 +67,7 @@ func (s *PaymentService) capturePaypalPayment(input CapturePaymentInput, payment
 		return nil, fmt.Errorf("%w: %v", ErrPaymentChannelConfigInvalid, err)
 	}
 
-	ctx, cancel := detachPaymentGatewayContext(input.Context)
+	ctx, cancel := detachOutboundRequestContext(input.Context)
 	defer cancel()
 
 	captureResult, err := paypal.CaptureOrder(ctx, cfg, payment.ProviderRef)
@@ -122,7 +122,7 @@ func (s *PaymentService) captureWechatPayment(input CapturePaymentInput, payment
 		return nil, fmt.Errorf("%w: %v", ErrPaymentChannelConfigInvalid, err)
 	}
 
-	ctx, cancel := detachPaymentGatewayContext(input.Context)
+	ctx, cancel := detachOutboundRequestContext(input.Context)
 	defer cancel()
 
 	queryResult, err := wechatpay.QueryOrderByOutTradeNo(ctx, cfg, payment.ProviderRef)
@@ -176,7 +176,7 @@ func (s *PaymentService) captureStripePayment(input CapturePaymentInput, payment
 		return nil, fmt.Errorf("%w: %v", ErrPaymentChannelConfigInvalid, err)
 	}
 
-	ctx, cancel := detachPaymentGatewayContext(input.Context)
+	ctx, cancel := detachOutboundRequestContext(input.Context)
 	defer cancel()
 
 	queryResult, err := stripe.QueryPayment(ctx, cfg, payment.ProviderRef)

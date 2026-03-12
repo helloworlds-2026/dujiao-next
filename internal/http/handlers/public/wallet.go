@@ -110,7 +110,7 @@ func (h *Handler) RechargeWallet(c *gin.Context) {
 		shared.RespondError(c, response.CodeInternal, "error.user_fetch_failed", err)
 		return
 	}
-	response.Success(c, buildWalletRechargePaymentPayload(result.Recharge, result.Payment, account))
+	response.Success(c, shared.BuildWalletRechargePaymentPayload(result.Recharge, result.Payment, account))
 }
 
 // GetMyWalletRecharge 获取当前用户充值单详情
@@ -144,7 +144,7 @@ func (h *Handler) GetMyWalletRecharge(c *gin.Context) {
 		shared.RespondError(c, response.CodeInternal, "error.user_fetch_failed", err)
 		return
 	}
-	response.Success(c, buildWalletRechargePaymentPayload(recharge, payment, account))
+	response.Success(c, shared.BuildWalletRechargePaymentPayload(recharge, payment, account))
 }
 
 // CaptureMyWalletRechargePayment 主动检查当前用户充值支付状态
@@ -194,30 +194,5 @@ func (h *Handler) CaptureMyWalletRechargePayment(c *gin.Context) {
 		shared.RespondError(c, response.CodeInternal, "error.user_fetch_failed", err)
 		return
 	}
-	response.Success(c, buildWalletRechargePaymentPayload(updatedRecharge, updatedPayment, account))
-}
-
-func buildWalletRechargePaymentPayload(recharge *models.WalletRechargeOrder, payment *models.Payment, account *models.WalletAccount) gin.H {
-	payload := gin.H{
-		"recharge": recharge,
-		"payment":  payment,
-	}
-	if account != nil {
-		payload["account"] = account
-	}
-	if payment != nil {
-		payload["payment_id"] = payment.ID
-		payload["provider_type"] = payment.ProviderType
-		payload["channel_type"] = payment.ChannelType
-		payload["interaction_mode"] = payment.InteractionMode
-		payload["pay_url"] = payment.PayURL
-		payload["qr_code"] = payment.QRCode
-		payload["expires_at"] = payment.ExpiredAt
-		payload["status"] = payment.Status
-	}
-	if recharge != nil {
-		payload["recharge_no"] = recharge.RechargeNo
-		payload["recharge_status"] = recharge.Status
-	}
-	return payload
+	response.Success(c, shared.BuildWalletRechargePaymentPayload(updatedRecharge, updatedPayment, account))
 }

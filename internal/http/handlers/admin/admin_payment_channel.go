@@ -17,6 +17,7 @@ import (
 // CreatePaymentChannelRequest 创建支付渠道请求
 type CreatePaymentChannelRequest struct {
 	Name            string                 `json:"name" binding:"required"`
+	Icon            *string                `json:"icon"`
 	ProviderType    string                 `json:"provider_type" binding:"required"`
 	ChannelType     string                 `json:"channel_type" binding:"required"`
 	InteractionMode string                 `json:"interaction_mode" binding:"required"`
@@ -43,6 +44,9 @@ func (h *Handler) CreatePaymentChannel(c *gin.Context) {
 		ConfigJSON:      models.JSON(req.ConfigJSON),
 		SortOrder:       req.SortOrder,
 		IsActive:        true,
+	}
+	if req.Icon != nil {
+		channel.Icon = *req.Icon
 	}
 	if req.IsActive != nil {
 		channel.IsActive = *req.IsActive
@@ -78,6 +82,7 @@ func (h *Handler) CreatePaymentChannel(c *gin.Context) {
 // UpdatePaymentChannelRequest 更新支付渠道请求
 type UpdatePaymentChannelRequest struct {
 	Name            string                 `json:"name"`
+	Icon            *string                `json:"icon"`
 	ProviderType    string                 `json:"provider_type"`
 	ChannelType     string                 `json:"channel_type"`
 	InteractionMode string                 `json:"interaction_mode"`
@@ -115,6 +120,9 @@ func (h *Handler) UpdatePaymentChannel(c *gin.Context) {
 
 	if req.Name != "" {
 		channel.Name = req.Name
+	}
+	if req.Icon != nil {
+		channel.Icon = *req.Icon
 	}
 	if req.ProviderType != "" {
 		channel.ProviderType = req.ProviderType

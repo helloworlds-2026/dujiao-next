@@ -10,6 +10,7 @@ import (
 type PaymentChannel struct {
 	ID              uint           `gorm:"primarykey" json:"id"`                                  // 主键
 	Name            string         `gorm:"not null" json:"name"`                                  // 渠道名称
+	Icon            string         `gorm:"type:varchar(512);default:''" json:"icon"`              // 渠道图标（可选）
 	ProviderType    string         `gorm:"not null" json:"provider_type"`                         // 提供方类型（official/epay）
 	ChannelType     string         `gorm:"not null" json:"channel_type"`                          // 渠道类型（wechat/alipay/qqpay/paypal）
 	InteractionMode string         `gorm:"not null" json:"interaction_mode"`                      // 交互方式（qr/redirect）

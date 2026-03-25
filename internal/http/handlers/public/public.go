@@ -100,7 +100,7 @@ func (h *Handler) GetConfig(c *gin.Context) {
 	}
 	publicChannels := make([]map[string]interface{}, 0, len(channels))
 	for _, channel := range channels {
-		publicChannels = append(publicChannels, map[string]interface{}{
+		ch := map[string]interface{}{
 			"id":               channel.ID,
 			"name":             channel.Name,
 			"provider_type":    channel.ProviderType,
@@ -108,7 +108,11 @@ func (h *Handler) GetConfig(c *gin.Context) {
 			"interaction_mode": channel.InteractionMode,
 			"fee_rate":         channel.FeeRate,
 			"fixed_fee":        channel.FixedFee,
-		})
+		}
+		if channel.Icon != "" {
+			ch["icon"] = channel.Icon
+		}
+		publicChannels = append(publicChannels, ch)
 	}
 	data["payment_channels"] = publicChannels
 

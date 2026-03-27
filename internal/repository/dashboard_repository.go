@@ -59,6 +59,8 @@ type DashboardPaymentTrendRow struct {
 type DashboardStockStatsRow struct {
 	OutOfStockProducts   int64
 	LowStockProducts     int64
+	OutOfStockSKUs       int64
+	LowStockSKUs         int64
 	AutoAvailableSecrets int64
 	ManualAvailableUnits int64
 }
@@ -333,10 +335,18 @@ func (r *GormDashboardRepository) GetStockStats(lowStockThreshold int64) (Dashbo
 	}
 
 	autoProductIDs := make([]uint, 0)
+	allActiveSKUIDs := make([]uint, 0)
+	autoProductActiveSKUs := make(map[uint][]uint) // product_id -> active sku_ids
 	for _, product := range products {
 		fulfillmentType := strings.TrimSpace(product.FulfillmentType)
 		if fulfillmentType == constants.FulfillmentTypeAuto {
 			autoProductIDs = append(autoProductIDs, product.ID)
+			skuIDs := make([]uint, 0, len(product.SKUs))
+			for _, sku := range activeProductSKUs(product.SKUs) {
+				skuIDs = append(skuIDs, sku.ID)
+				allActiveSKUIDs = append(allActiveSKUIDs, sku.ID)
+			}
+			autoProductActiveSKUs[product.ID] = skuIDs
 			continue
 		}
 		if fulfillmentType != constants.FulfillmentTypeManual {
@@ -353,37 +363,92 @@ func (r *GormDashboardRepository) GetStockStats(lowStockThreshold int64) (Dashbo
 		case constants.NotificationAlertTypeLowStockProducts:
 			result.LowStockProducts += 1
 		}
+		// 手动交付 SKU 维度统计
+		activeSKUs := activeProductSKUs(product.SKUs)
+		for _, sku := range activeSKUs {
+			if sku.ManualStockTotal == constants.ManualStockUnlimited {
+				continue
+			}
+			skuAvail := int64(sku.ManualStockTotal)
+			if skuAvail < 0 {
+				skuAvail = 0
+			}
+			switch classifyInventoryAlertType(skuAvail, lowStockThreshold) {
+			case constants.NotificationAlertTypeOutOfStockProducts:
+				result.OutOfStockSKUs += 1
+			case constants.NotificationAlertTypeLowStockProducts:
+				result.LowStockSKUs += 1
+			}
+		}
 	}
 
 	if len(autoProductIDs) == 0 {
 		return result, nil
 	}
 
+	// 按 product_id + sku_id 分组查询，仅统计启用 SKU 和 sku_id=0（遗留）的卡密
 	type countRow struct {
 		ProductID uint
+		SKUID     uint
 		Total     int64
 	}
 	var rows []countRow
-	if err := r.db.Model(&models.CardSecret{}).
-		Select("product_id, COUNT(*) as total").
-		Where("product_id IN ? AND status = ?", autoProductIDs, models.CardSecretStatusAvailable).
-		Group("product_id").
-		Scan(&rows).Error; err != nil {
+	query := r.db.Model(&models.CardSecret{}).
+		Select("product_id, sku_id, COUNT(*) as total").
+		Where("product_id IN ? AND status = ?", autoProductIDs, models.CardSecretStatusAvailable)
+	if len(allActiveSKUIDs) > 0 {
+		query = query.Where("sku_id = 0 OR sku_id IN ?", allActiveSKUIDs)
+	} else {
+		query = query.Where("sku_id = 0")
+	}
+	if err := query.Group("product_id, sku_id").Scan(&rows).Error; err != nil {
 		return result, err
 	}
 
-	availableMap := make(map[uint]int64, len(rows))
+	// 按商品聚合总库存，同时按 SKU 统计
+	productAvailableMap := make(map[uint]int64)
+	skuAvailableMap := make(map[uint]map[uint]int64) // product_id -> sku_id -> total
 	for _, item := range rows {
-		availableMap[item.ProductID] = item.Total
+		productAvailableMap[item.ProductID] += item.Total
 		result.AutoAvailableSecrets += item.Total
+		if skuAvailableMap[item.ProductID] == nil {
+			skuAvailableMap[item.ProductID] = make(map[uint]int64)
+		}
+		skuAvailableMap[item.ProductID][item.SKUID] = item.Total
 	}
 
+	// 商品级别统计
 	for _, productID := range autoProductIDs {
-		available := availableMap[productID]
-		if available <= 0 {
+		available := productAvailableMap[productID]
+		switch classifyInventoryAlertType(available, lowStockThreshold) {
+		case constants.NotificationAlertTypeOutOfStockProducts:
 			result.OutOfStockProducts += 1
-		} else if available <= lowStockThreshold {
+		case constants.NotificationAlertTypeLowStockProducts:
 			result.LowStockProducts += 1
+		}
+	}
+
+	// SKU 级别统计
+	for productID, skuIDs := range autoProductActiveSKUs {
+		skuMap := skuAvailableMap[productID]
+		legacyTargetSKUID := uint(0)
+		if len(skuIDs) > 0 {
+			legacyTargetSKUID = skuIDs[0] // 简化处理：sku_id=0 库存归入第一个启用 SKU
+		}
+		for _, skuID := range skuIDs {
+			skuAvail := int64(0)
+			if skuMap != nil {
+				skuAvail = skuMap[skuID]
+			}
+			if skuID == legacyTargetSKUID && skuMap != nil {
+				skuAvail += skuMap[0]
+			}
+			switch classifyInventoryAlertType(skuAvail, lowStockThreshold) {
+			case constants.NotificationAlertTypeOutOfStockProducts:
+				result.OutOfStockSKUs += 1
+			case constants.NotificationAlertTypeLowStockProducts:
+				result.LowStockSKUs += 1
+			}
 		}
 	}
 

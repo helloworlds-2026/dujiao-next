@@ -64,6 +64,8 @@ type DashboardKPI struct {
 	ActiveProducts       int64  `json:"active_products"`
 	OutOfStockProducts   int64  `json:"out_of_stock_products"`
 	LowStockProducts     int64  `json:"low_stock_products"`
+	OutOfStockSKUs       int64  `json:"out_of_stock_skus"`
+	LowStockSKUs         int64  `json:"low_stock_skus"`
 	AutoAvailableSecrets int64  `json:"auto_available_secrets"`
 	ManualAvailableUnits int64  `json:"manual_available_units"`
 }
@@ -219,6 +221,8 @@ func (s *DashboardService) GetOverview(ctx context.Context, input DashboardQuery
 			ActiveProducts:       overview.ActiveProducts,
 			OutOfStockProducts:   stockStats.OutOfStockProducts,
 			LowStockProducts:     stockStats.LowStockProducts,
+			OutOfStockSKUs:       stockStats.OutOfStockSKUs,
+			LowStockSKUs:         stockStats.LowStockSKUs,
 			AutoAvailableSecrets: stockStats.AutoAvailableSecrets,
 			ManualAvailableUnits: stockStats.ManualAvailableUnits,
 		},
@@ -236,6 +240,11 @@ func (s *DashboardService) GetOverview(ctx context.Context, input DashboardQuery
 
 	_ = cache.SetJSON(ctx, cacheKey, response, dashboardCacheTTL)
 	return response, nil
+}
+
+// LoadDashboardAlertSetting 获取仪表盘告警配置
+func (s *DashboardService) LoadDashboardAlertSetting() DashboardAlertSetting {
+	return s.loadDashboardSetting().Alert
 }
 
 // GetInventoryAlertItems 获取库存异常明细

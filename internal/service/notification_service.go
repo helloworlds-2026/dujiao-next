@@ -635,7 +635,7 @@ func buildInventoryAlertDispatchPayloads(
 		}
 		data["alert_type"] = alertType
 		data["alert_level"] = inventoryAlertLevel(alertType)
-		data["alert_value"] = fmt.Sprintf("%d", productCount)
+		data["alert_value"] = fmt.Sprintf("%d", len(group))
 		data["alert_threshold"] = fmt.Sprintf("%d", thresholdValueByAlertType(dashboardSetting.Alert, alertType))
 		data["affected_items_count"] = fmt.Sprintf("%d", len(group))
 		data["affected_product_count"] = fmt.Sprintf("%d", productCount)
@@ -766,16 +766,16 @@ func buildInventoryAlertMessage(locale, alertType string, productCount, itemCoun
 	case constants.NotificationAlertTypeOutOfStockProducts:
 		return localizedNotificationText(
 			locale,
-			fmt.Sprintf("检测到 %d 个缺货商品，涉及 %d 个具体库存项；本类告警最短 %s 发送一次。", productCount, itemCount, intervalText),
-			fmt.Sprintf("偵測到 %d 個缺貨商品，涉及 %d 個具體庫存項；本類告警最短 %s 發送一次。", productCount, itemCount, intervalText),
-			fmt.Sprintf("Detected %d out-of-stock products across %d inventory items; this alert is sent at most once every %s.", productCount, itemCount, intervalText),
+			fmt.Sprintf("检测到 %d 个 SKU 缺货（涉及 %d 个商品）；本类告警最短 %s 发送一次。", itemCount, productCount, intervalText),
+			fmt.Sprintf("偵測到 %d 個 SKU 缺貨（涉及 %d 個商品）；本類告警最短 %s 發送一次。", itemCount, productCount, intervalText),
+			fmt.Sprintf("Detected %d out-of-stock SKUs across %d products; this alert is sent at most once every %s.", itemCount, productCount, intervalText),
 		)
 	default:
 		return localizedNotificationText(
 			locale,
-			fmt.Sprintf("检测到 %d 个低库存商品，涉及 %d 个具体库存项；本类告警最短 %s 发送一次。", productCount, itemCount, intervalText),
-			fmt.Sprintf("偵測到 %d 個低庫存商品，涉及 %d 個具體庫存項；本類告警最短 %s 發送一次。", productCount, itemCount, intervalText),
-			fmt.Sprintf("Detected %d low-stock products across %d inventory items; this alert is sent at most once every %s.", productCount, itemCount, intervalText),
+			fmt.Sprintf("检测到 %d 个 SKU 低库存（涉及 %d 个商品）；本类告警最短 %s 发送一次。", itemCount, productCount, intervalText),
+			fmt.Sprintf("偵測到 %d 個 SKU 低庫存（涉及 %d 個商品）；本類告警最短 %s 發送一次。", itemCount, productCount, intervalText),
+			fmt.Sprintf("Detected %d low-stock SKUs across %d products; this alert is sent at most once every %s.", itemCount, productCount, intervalText),
 		)
 	}
 }

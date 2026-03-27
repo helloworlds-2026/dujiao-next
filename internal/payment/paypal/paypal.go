@@ -15,6 +15,7 @@ import (
 
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/payment/common"
+	"github.com/shopspring/decimal"
 )
 
 var (
@@ -67,6 +68,8 @@ type Config struct {
 	LandingPage        string `json:"landing_page"`
 	UserAction         string `json:"user_action"`
 	ShippingPreference string `json:"shipping_preference"`
+	TargetCurrency     string `json:"target_currency"`
+	ExchangeRate       string `json:"exchange_rate"`
 }
 
 // CreateInput 创建 PayPal 订单输入。
@@ -470,6 +473,30 @@ func (c *Config) Normalize() {
 	if c.ShippingPreference == "" {
 		c.ShippingPreference = paypalShippingPreferenceNoShip
 	}
+	c.TargetCurrency = strings.ToUpper(strings.TrimSpace(c.TargetCurrency))
+	c.ExchangeRate = strings.TrimSpace(c.ExchangeRate)
+}
+
+// NeedsCurrencyConversion 是否需要货币转换。
+func (c *Config) NeedsCurrencyConversion() bool {
+	return c.TargetCurrency != "" && c.ExchangeRate != ""
+}
+
+// ConvertAmount 将原始金额按汇率转换为目标货币金额，返回转换后的金额和目标货币。
+func (c *Config) ConvertAmount(amount, currency string) (string, string, error) {
+	if !c.NeedsCurrencyConversion() {
+		return amount, currency, nil
+	}
+	amountDec, err := decimal.NewFromString(strings.TrimSpace(amount))
+	if err != nil {
+		return "", "", fmt.Errorf("%w: invalid amount %q", ErrConfigInvalid, amount)
+	}
+	rate, err := decimal.NewFromString(c.ExchangeRate)
+	if err != nil || rate.LessThanOrEqual(decimal.Zero) {
+		return "", "", fmt.Errorf("%w: invalid exchange_rate %q", ErrConfigInvalid, c.ExchangeRate)
+	}
+	converted := amountDec.Mul(rate).Round(2)
+	return converted.String(), c.TargetCurrency, nil
 }
 
 func buildApplicationContext(cfg *Config, returnURL, cancelURL string) map[string]string {

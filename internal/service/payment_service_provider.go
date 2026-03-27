@@ -293,11 +293,21 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *m
 			if err := paypal.ValidateConfig(cfg); err != nil {
 				return fmt.Errorf("%w: %v", ErrPaymentChannelConfigInvalid, err)
 			}
+			payAmount := payment.Amount.String()
+			payCurrency := payment.Currency
+			if cfg.NeedsCurrencyConversion() {
+				converted, targetCur, convErr := cfg.ConvertAmount(payAmount, payCurrency)
+				if convErr != nil {
+					return fmt.Errorf("%w: %v", ErrPaymentChannelConfigInvalid, convErr)
+				}
+				payAmount = converted
+				payCurrency = targetCur
+			}
 			createResult, err := paypal.CreateOrder(gatewayCtx, cfg, paypal.CreateInput{
 				OrderNo:     order.OrderNo,
 				PaymentID:   payment.ID,
-				Amount:      payment.Amount.String(),
-				Currency:    payment.Currency,
+				Amount:      payAmount,
+				Currency:    payCurrency,
 				Description: buildOrderSubject(order),
 				ReturnURL:   appendURLQuery(cfg.ReturnURL, buildPaymentReturnQuery(input, order, "pp_return", "")),
 				CancelURL:   appendURLQuery(cfg.CancelURL, buildPaymentReturnQuery(input, order, "pp_cancel", "")),
@@ -319,7 +329,15 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *m
 			payment.Status = constants.PaymentStatusPending
 			payment.ProviderRef = strings.TrimSpace(createResult.OrderID)
 			if createResult.Raw != nil {
-				payment.ProviderPayload = models.JSON(createResult.Raw)
+				providerPayload := models.JSON(createResult.Raw)
+				if cfg.NeedsCurrencyConversion() {
+					providerPayload["converted_amount"] = payAmount
+					providerPayload["converted_currency"] = payCurrency
+					providerPayload["exchange_rate"] = strings.TrimSpace(cfg.ExchangeRate)
+					providerPayload["original_amount"] = payment.Amount.String()
+					providerPayload["original_currency"] = payment.Currency
+				}
+				payment.ProviderPayload = providerPayload
 			}
 			payment.UpdatedAt = time.Now()
 			if err := s.paymentRepo.Update(payment); err != nil {

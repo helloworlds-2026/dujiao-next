@@ -26,6 +26,7 @@ type OrderRepository interface {
 	ListByGuest(email, password string, page, pageSize int) ([]models.Order, int64, error)
 	ListAdmin(filter OrderListFilter) ([]models.Order, int64, error)
 	UpdateStatus(id uint, status string, updates map[string]interface{}) error
+	CountOrderItemsByProduct(productID uint) (int64, error)
 	Transaction(fn func(tx *gorm.DB) error) error
 	WithTx(tx *gorm.DB) *GormOrderRepository
 }
@@ -377,4 +378,16 @@ func (r *GormOrderRepository) ListByGuest(email, password string, page, pageSize
 		return nil, 0, err
 	}
 	return orders, total, nil
+}
+
+// CountOrderItemsByProduct 统计商品关联的订单项数量
+func (r *GormOrderRepository) CountOrderItemsByProduct(productID uint) (int64, error) {
+	if productID == 0 {
+		return 0, errors.New("invalid product id")
+	}
+	var count int64
+	if err := r.db.Model(&models.OrderItem{}).Where("product_id = ?", productID).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
 }

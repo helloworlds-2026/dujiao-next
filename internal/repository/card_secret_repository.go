@@ -50,6 +50,7 @@ type CardSecretRepository interface {
 	Reserve(ids []uint, orderID uint, reservedAt time.Time) (int64, error)
 	ReleaseByOrder(orderID uint) (int64, error)
 	MarkUsed(ids []uint, orderID uint, usedAt time.Time) (int64, error)
+	DeleteByProduct(productID uint) error
 	Transaction(fn func(tx *gorm.DB) error) error
 	WithTx(tx *gorm.DB) *GormCardSecretRepository
 }
@@ -240,6 +241,14 @@ func (r *GormCardSecretRepository) BatchDeleteByIDs(ids []uint) (int64, error) {
 	}
 	result := r.db.Where("id IN ?", ids).Delete(&models.CardSecret{})
 	return result.RowsAffected, result.Error
+}
+
+// DeleteByProduct 删除指定商品下的所有卡密
+func (r *GormCardSecretRepository) DeleteByProduct(productID uint) error {
+	if productID == 0 {
+		return errors.New("invalid product id")
+	}
+	return r.db.Where("product_id = ?", productID).Delete(&models.CardSecret{}).Error
 }
 
 // CountByProduct 统计库存数量（总/可用/已用）

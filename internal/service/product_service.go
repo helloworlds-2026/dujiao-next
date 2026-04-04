@@ -18,10 +18,12 @@ type ProductService struct {
 	repo                 repository.ProductRepository
 	productSKURepo       repository.ProductSKURepository
 	cardSecretRepo       repository.CardSecretRepository
+	cardSecretBatchRepo  repository.CardSecretBatchRepository
 	categoryRepo         repository.CategoryRepository
 	memberLevelPriceRepo repository.MemberLevelPriceRepository
 	cartRepo             repository.CartRepository
 	productMappingRepo   repository.ProductMappingRepository
+	orderRepo            repository.OrderRepository
 }
 
 // NewProductService 创建商品服务
@@ -29,19 +31,23 @@ func NewProductService(
 	repo repository.ProductRepository,
 	productSKURepo repository.ProductSKURepository,
 	cardSecretRepo repository.CardSecretRepository,
+	cardSecretBatchRepo repository.CardSecretBatchRepository,
 	categoryRepo repository.CategoryRepository,
 	memberLevelPriceRepo repository.MemberLevelPriceRepository,
 	cartRepo repository.CartRepository,
 	productMappingRepo repository.ProductMappingRepository,
+	orderRepo repository.OrderRepository,
 ) *ProductService {
 	return &ProductService{
 		repo:                 repo,
 		productSKURepo:       productSKURepo,
 		cardSecretRepo:       cardSecretRepo,
+		cardSecretBatchRepo:  cardSecretBatchRepo,
 		categoryRepo:         categoryRepo,
 		memberLevelPriceRepo: memberLevelPriceRepo,
 		cartRepo:             cartRepo,
 		productMappingRepo:   productMappingRepo,
+		orderRepo:            orderRepo,
 	}
 }
 
@@ -871,7 +877,7 @@ func validateProductCategoryAssignment(categoryRepo repository.CategoryRepositor
 	return nil
 }
 
-// Delete 删除商品
+// Delete 删除商品（含前置校验和级联清理）
 func (s *ProductService) Delete(id string) error {
 	product, err := s.repo.GetByID(id)
 	if err != nil {
@@ -880,7 +886,42 @@ func (s *ProductService) Delete(id string) error {
 	if product == nil {
 		return ErrNotFound
 	}
+
+	// 事务前校验（避免 SQLite 自锁）
+
+	// 1. 检查是否有可用或预占的卡密库存
+	available, err := s.cardSecretRepo.CountAvailable(product.ID, 0)
+	if err != nil {
+		return err
+	}
+	if available > 0 {
+		return ErrProductHasStock
+	}
+	reserved, err := s.cardSecretRepo.CountReserved(product.ID, 0)
+	if err != nil {
+		return err
+	}
+	if reserved > 0 {
+		return ErrProductHasStock
+	}
+
+	// 2. 检查是否有成交记录
+	orderCount, err := s.orderRepo.CountOrderItemsByProduct(product.ID)
+	if err != nil {
+		return err
+	}
+	if orderCount > 0 {
+		return ErrProductHasOrderRecord
+	}
+
+	// 事务内级联删除
 	return s.repo.Transaction(func(tx *gorm.DB) error {
+		if err := s.cardSecretRepo.WithTx(tx).DeleteByProduct(product.ID); err != nil {
+			return err
+		}
+		if err := s.cardSecretBatchRepo.WithTx(tx).DeleteByProduct(product.ID); err != nil {
+			return err
+		}
 		if err := s.productSKURepo.WithTx(tx).DeleteByProduct(product.ID); err != nil {
 			return err
 		}

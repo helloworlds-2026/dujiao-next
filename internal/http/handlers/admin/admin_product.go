@@ -479,21 +479,32 @@ func (h *Handler) BatchDeleteProducts(c *gin.Context) {
 		return
 	}
 	successCount := 0
+	var failedIDs []uint
 	for _, id := range req.IDs {
 		if err := h.ProductService.Delete(strconv.FormatUint(uint64(id), 10)); err == nil {
 			successCount++
+		} else {
+			failedIDs = append(failedIDs, id)
 		}
 	}
-	response.Success(c, gin.H{"total": len(req.IDs), "success_count": successCount})
+	response.Success(c, gin.H{"total": len(req.IDs), "success_count": successCount, "failed_ids": failedIDs})
 }
 
-// DeleteProduct 删除商品（软删除）
+// DeleteProduct 删除商品
 func (h *Handler) DeleteProduct(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := h.ProductService.Delete(id); err != nil {
 		if errors.Is(err, service.ErrNotFound) {
 			shared.RespondError(c, response.CodeNotFound, "error.product_not_found", nil)
+			return
+		}
+		if errors.Is(err, service.ErrProductHasStock) {
+			shared.RespondError(c, response.CodeBadRequest, "error.product_has_stock", nil)
+			return
+		}
+		if errors.Is(err, service.ErrProductHasOrderRecord) {
+			shared.RespondError(c, response.CodeBadRequest, "error.product_has_order_record", nil)
 			return
 		}
 		shared.RespondError(c, response.CodeInternal, "error.product_delete_failed", err)

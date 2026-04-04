@@ -272,7 +272,7 @@ func newAutoStockProductService(t *testing.T) (*ProductService, *gorm.DB) {
 		t.Fatalf("auto migrate card secret failed: %v", err)
 	}
 	secretRepo := repository.NewCardSecretRepository(db)
-	return NewProductService(nil, nil, secretRepo, nil, nil, nil, nil), db
+	return NewProductService(nil, nil, secretRepo, nil, nil, nil, nil, nil, nil), db
 }
 
 func insertCardSecrets(t *testing.T, db *gorm.DB, productID, skuID uint, status string, count int) {
@@ -699,7 +699,7 @@ func newProductServiceForTest(t *testing.T) (*ProductService, *gorm.DB) {
 	if err != nil {
 		t.Fatalf("open sqlite failed: %v", err)
 	}
-	if err := db.AutoMigrate(&models.Category{}, &models.Product{}, &models.ProductSKU{}, &models.CardSecret{}, &models.MemberLevelPrice{}, &models.CartItem{}, &models.ProductMapping{}, &models.SKUMapping{}); err != nil {
+	if err := db.AutoMigrate(&models.Category{}, &models.Product{}, &models.ProductSKU{}, &models.CardSecret{}, &models.CardSecretBatch{}, &models.MemberLevelPrice{}, &models.CartItem{}, &models.ProductMapping{}, &models.SKUMapping{}, &models.Order{}, &models.OrderItem{}); err != nil {
 		t.Fatalf("auto migrate product service tables failed: %v", err)
 	}
 
@@ -707,10 +707,12 @@ func newProductServiceForTest(t *testing.T) (*ProductService, *gorm.DB) {
 		repository.NewProductRepository(db),
 		repository.NewProductSKURepository(db),
 		repository.NewCardSecretRepository(db),
+		repository.NewCardSecretBatchRepository(db),
 		repository.NewCategoryRepository(db),
 		repository.NewMemberLevelPriceRepository(db),
 		repository.NewCartRepository(db),
 		repository.NewProductMappingRepository(db),
+		repository.NewOrderRepository(db),
 	), db
 }
 

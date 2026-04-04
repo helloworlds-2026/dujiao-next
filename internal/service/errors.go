@@ -163,6 +163,8 @@ var (
 	ErrPaymentChannelNotAllowedForProduct  = errors.New("payment channel not allowed for product")
 	ErrPaymentChannelNotAllowedForRecharge = errors.New("payment channel not allowed for wallet recharge")
 	ErrWalletOnlyPaymentRequired           = errors.New("wallet only payment required")
+	ErrProductHasStock                     = errors.New("product has stock")
+	ErrProductHasOrderRecord               = errors.New("product has order record")
 	ErrMediaNotFound                       = errors.New("media not found")
 	ErrMediaNameEmpty                      = errors.New("media name empty")
 )

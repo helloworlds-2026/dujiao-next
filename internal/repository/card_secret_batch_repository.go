@@ -13,6 +13,7 @@ type CardSecretBatchRepository interface {
 	Create(batch *models.CardSecretBatch) error
 	GetByID(id uint) (*models.CardSecretBatch, error)
 	ListByProduct(productID, skuID uint, page, pageSize int) ([]models.CardSecretBatch, int64, error)
+	DeleteByProduct(productID uint) error
 	WithTx(tx *gorm.DB) *GormCardSecretBatchRepository
 }
 
@@ -82,4 +83,12 @@ func (r *GormCardSecretBatchRepository) ListByProduct(productID, skuID uint, pag
 		return nil, 0, err
 	}
 	return items, total, nil
+}
+
+// DeleteByProduct 删除指定商品下的所有卡密批次
+func (r *GormCardSecretBatchRepository) DeleteByProduct(productID uint) error {
+	if productID == 0 {
+		return errors.New("invalid product id")
+	}
+	return r.db.Where("product_id = ?", productID).Delete(&models.CardSecretBatch{}).Error
 }

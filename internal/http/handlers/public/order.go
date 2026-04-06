@@ -120,7 +120,11 @@ func (h *Handler) GetOrderPaymentChannels(c *gin.Context) {
 	}
 
 	user, _ := h.UserRepo.GetByID(uid)
-	channels, err := h.getAvailablePaymentChannels(&models.Money{Decimal: amount}, user, constants.PaymentTypeOrder)
+	channels, err := h.PaymentService.GetAvailableChannels(service.AvailablePaymentChannelFilter{
+		TargetAmount: &models.Money{Decimal: amount},
+		User:         user,
+		PaymentType:  constants.PaymentTypeOrder,
+	})
 	if err != nil {
 		shared.RespondError(c, response.CodeInternal, "error.payment_fetch_failed", err)
 		return

@@ -125,7 +125,9 @@ func (h *Handler) GetConfig(c *gin.Context) {
 		return
 	}
 
-	publicChannels, err := h.getAvailablePaymentChannels(nil, nil, constants.PaymentTypeOrder)
+	publicChannels, err := h.PaymentService.GetAvailableChannels(service.AvailablePaymentChannelFilter{
+		PaymentType: constants.PaymentTypeOrder,
+	})
 	if err != nil {
 		shared.RespondError(c, response.CodeInternal, "error.config_fetch_failed", err)
 		return

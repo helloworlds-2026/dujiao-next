@@ -8,8 +8,6 @@ import (
 	"github.com/dujiao-next/internal/dto"
 	"github.com/dujiao-next/internal/http/handlers/shared"
 	"github.com/dujiao-next/internal/http/response"
-	"github.com/dujiao-next/internal/models"
-	"github.com/dujiao-next/internal/repository"
 	"github.com/dujiao-next/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -179,101 +177,4 @@ func respondPaymentCreateError(c *gin.Context, err error) {
 
 func respondPaymentCaptureError(c *gin.Context, err error) {
 	respondWithMappedError(c, err, paymentCaptureErrorRules, response.CodeInternal, "error.payment_callback_failed")
-}
-
-// getAvailablePaymentChannels 获取过滤后的可用支付渠道
-func (h *Handler) getAvailablePaymentChannels(targetAmount *models.Money, user *models.User, paymentType string) ([]map[string]interface{}, error) {
-	channels, _, err := h.PaymentService.ListChannels(repository.PaymentChannelListFilter{
-		Page:       1,
-		PageSize:   200,
-		ActiveOnly: true,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	publicChannels := make([]map[string]interface{}, 0, len(channels))
-	for _, channel := range channels {
-		// Filter by hide_amount_out_range
-		if targetAmount != nil && channel.HideAmountOutRange {
-			minAmt := channel.MinAmount.Decimal
-			maxAmt := channel.MaxAmount.Decimal
-			amtDec := targetAmount.Decimal
-
-			if minAmt.IsPositive() && amtDec.LessThan(minAmt) {
-				continue
-			}
-			if maxAmt.IsPositive() && amtDec.GreaterThan(maxAmt) {
-				continue
-			}
-		}
-
-		// Filter by PaymentRoles
-		if len(channel.PaymentRoles) > 0 {
-			targetRole := constants.PaymentRoleGuest
-			if user != nil {
-				targetRole = constants.PaymentRoleMember
-			}
-			matched := false
-			for _, role := range channel.PaymentRoles {
-				if role == targetRole {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				continue
-			}
-		}
-
-		// Filter by MemberLevels
-		if len(channel.MemberLevels) > 0 {
-			if user == nil || user.MemberLevelID == 0 {
-				continue
-			}
-			matched := false
-			for _, ml := range channel.MemberLevels {
-				if ml == user.MemberLevelID {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				continue
-			}
-		}
-
-		// Filter by PaymentTypes
-		if len(channel.PaymentTypes) > 0 && paymentType != "" {
-			matched := false
-			for _, pt := range channel.PaymentTypes {
-				if pt == paymentType {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				continue
-			}
-		}
-
-		ch := map[string]interface{}{
-			"id":                    channel.ID,
-			"name":                  channel.Name,
-			"provider_type":         channel.ProviderType,
-			"channel_type":          channel.ChannelType,
-			"interaction_mode":      channel.InteractionMode,
-			"fee_rate":              channel.FeeRate,
-			"fixed_fee":             channel.FixedFee,
-			"min_amount":            channel.MinAmount,
-			"max_amount":            channel.MaxAmount,
-			"hide_amount_out_range": channel.HideAmountOutRange,
-		}
-		if channel.Icon != "" {
-			ch["icon"] = channel.Icon
-		}
-		publicChannels = append(publicChannels, ch)
-	}
-
-	return publicChannels, nil
 }

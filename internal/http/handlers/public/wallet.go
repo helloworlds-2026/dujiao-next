@@ -25,6 +25,43 @@ type WalletRechargeRequest struct {
 	Remark    string `json:"remark"`
 }
 
+// WalletPaymentChannelsRequest 查询钱包充值可用支付渠道请求
+type WalletPaymentChannelsRequest struct {
+	Amount string `json:"amount" binding:"required"`
+}
+
+// GetMyWalletPaymentChannels 获取当前用户钱包充值可用支付渠道（按金额过滤）
+func (h *Handler) GetMyWalletPaymentChannels(c *gin.Context) {
+	uid, ok := shared.GetUserID(c)
+	if !ok {
+		return
+	}
+
+	var req WalletPaymentChannelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.RespondBindError(c, err)
+		return
+	}
+
+	amount, err := decimal.NewFromString(strings.TrimSpace(req.Amount))
+	if err != nil {
+		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
+		return
+	}
+	if amount.LessThanOrEqual(decimal.Zero) {
+		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
+		return
+	}
+
+	user, _ := h.UserRepo.GetByID(uid)
+	channels, err := h.getAvailablePaymentChannels(&models.Money{Decimal: amount}, user, constants.PaymentTypeWallet)
+	if err != nil {
+		shared.RespondError(c, response.CodeInternal, "error.payment_fetch_failed", err)
+		return
+	}
+	response.Success(c, channels)
+}
+
 // GetMyWallet 获取当前用户钱包信息
 func (h *Handler) GetMyWallet(c *gin.Context) {
 	uid, ok := shared.GetUserID(c)

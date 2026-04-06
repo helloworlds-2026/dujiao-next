@@ -553,6 +553,16 @@ func (s *PaymentService) ValidateChannel(channel *models.PaymentChannel) error {
 	if fixedFee.LessThan(decimal.Zero) || fixedFee.GreaterThanOrEqual(decimal.NewFromInt(10000)) {
 		return ErrPaymentChannelConfigInvalid
 	}
+	minAmount := channel.MinAmount.Decimal.Round(2)
+	maxAmount := channel.MaxAmount.Decimal.Round(2)
+	amountOverflow20_2 := decimal.NewFromInt(1000000000000000000)
+	// min/max amount are stored as decimal(20,2), max allowed is 999999999999999999.99.
+	if minAmount.LessThan(decimal.Zero) || minAmount.GreaterThanOrEqual(amountOverflow20_2) || maxAmount.LessThan(decimal.Zero) || maxAmount.GreaterThanOrEqual(amountOverflow20_2) {
+		return ErrPaymentChannelConfigInvalid
+	}
+	if maxAmount.GreaterThan(decimal.Zero) && minAmount.GreaterThan(maxAmount) {
+		return ErrPaymentChannelConfigInvalid
+	}
 	providerType := strings.ToLower(strings.TrimSpace(channel.ProviderType))
 	switch providerType {
 	case constants.PaymentProviderEpay:

@@ -102,6 +102,8 @@ var (
 	ErrPaymentChannelInactive              = errors.New("payment channel inactive")
 	ErrPaymentProviderNotSupported         = errors.New("payment provider not supported")
 	ErrPaymentChannelConfigInvalid         = errors.New("payment channel config invalid")
+	ErrPaymentAmountTooSmall               = errors.New("payment amount too small")
+	ErrPaymentAmountTooLarge               = errors.New("payment amount too large")
 	ErrPaymentGatewayRequestFailed         = errors.New("payment gateway request failed")
 	ErrPaymentGatewayResponseInvalid       = errors.New("payment gateway response invalid")
 	ErrWalletInvalidAmount                 = errors.New("wallet invalid amount")

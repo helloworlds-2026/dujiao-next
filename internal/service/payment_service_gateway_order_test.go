@@ -410,6 +410,29 @@ func TestValidateChannelRejectsInvalidEpayInteractionMode(t *testing.T) {
 	}
 }
 
+func TestValidateChannelAllowsUnlimitedMaxAmount(t *testing.T) {
+	svc, _ := setupPaymentServiceWalletTest(t)
+	channel := &models.PaymentChannel{
+		ProviderType:    constants.PaymentProviderEpay,
+		ChannelType:     constants.PaymentChannelTypeWechat,
+		InteractionMode: constants.PaymentInteractionRedirect,
+		MinAmount:       models.NewMoneyFromDecimal(decimal.RequireFromString("10.00")),
+		MaxAmount:       models.NewMoneyFromDecimal(decimal.Zero),
+		ConfigJSON: models.JSON{
+			"gateway_url":  "https://gateway.example.com",
+			"epay_version": "v1",
+			"merchant_id":  "1001",
+			"merchant_key": "key-001",
+			"notify_url":   "https://api.example.com/api/v1/payments/callback",
+			"return_url":   "https://shop.example.com/pay",
+		},
+	}
+
+	if err := svc.ValidateChannel(channel); err != nil {
+		t.Fatalf("ValidateChannel should allow max_amount=0 (unlimited): %v", err)
+	}
+}
+
 func TestHandleCallbackAcceptsGatewayOrderNoForOrderPayment(t *testing.T) {
 	svc, db := setupPaymentServiceWalletTest(t)
 	now := time.Now()

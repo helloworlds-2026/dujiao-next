@@ -56,6 +56,30 @@ func (s *StringArray) Scan(value interface{}) error {
 	return json.Unmarshal(bytes, s)
 }
 
+// UintArray 存储无符号整数数组，序列化为 JSON
+type UintArray []uint
+
+// Value 实现 driver.Valuer 接口
+func (u UintArray) Value() (driver.Value, error) {
+	if u == nil {
+		return nil, nil
+	}
+	return json.Marshal(u)
+}
+
+// Scan 实现 sql.Scanner 接口
+func (u *UintArray) Scan(value interface{}) error {
+	if value == nil {
+		*u = UintArray{}
+		return nil
+	}
+	bytes, ok := value.([]byte)
+	if !ok {
+		return nil
+	}
+	return json.Unmarshal(bytes, u)
+}
+
 // Category 分类表
 type Category struct {
 	ID        uint           `gorm:"primarykey" json:"id"`                      // 主键

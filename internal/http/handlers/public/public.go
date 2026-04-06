@@ -13,7 +13,6 @@ import (
 	"github.com/dujiao-next/internal/http/response"
 	"github.com/dujiao-next/internal/i18n"
 	"github.com/dujiao-next/internal/models"
-	"github.com/dujiao-next/internal/repository"
 	"github.com/dujiao-next/internal/service"
 	"github.com/dujiao-next/internal/version"
 
@@ -126,30 +125,10 @@ func (h *Handler) GetConfig(c *gin.Context) {
 		return
 	}
 
-	channels, _, err := h.PaymentService.ListChannels(repository.PaymentChannelListFilter{
-		Page:       1,
-		PageSize:   200,
-		ActiveOnly: true,
-	})
+	publicChannels, err := h.getAvailablePaymentChannels(nil, nil, constants.PaymentTypeOrder)
 	if err != nil {
 		shared.RespondError(c, response.CodeInternal, "error.config_fetch_failed", err)
 		return
-	}
-	publicChannels := make([]map[string]interface{}, 0, len(channels))
-	for _, channel := range channels {
-		ch := map[string]interface{}{
-			"id":               channel.ID,
-			"name":             channel.Name,
-			"provider_type":    channel.ProviderType,
-			"channel_type":     channel.ChannelType,
-			"interaction_mode": channel.InteractionMode,
-			"fee_rate":         channel.FeeRate,
-			"fixed_fee":        channel.FixedFee,
-		}
-		if channel.Icon != "" {
-			ch["icon"] = channel.Icon
-		}
-		publicChannels = append(publicChannels, ch)
 	}
 	data["payment_channels"] = publicChannels
 

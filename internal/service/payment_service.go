@@ -337,6 +337,9 @@ func (s *PaymentService) CreatePayment(input CreatePaymentInput) (*CreatePayment
 		if err := validatePaymentCurrencyForChannel(lockedOrder.Currency, channel); err != nil {
 			return err
 		}
+		if err := validatePaymentAmountForChannel(onlineAmount, channel); err != nil {
+			return err
+		}
 
 		fixedFee := decimal.Zero
 		if channel.FixedFee.Decimal.GreaterThan(decimal.Zero) {
@@ -521,6 +524,9 @@ func (s *PaymentService) CreateWalletRechargePayment(input CreateWalletRechargeP
 	fixedFee := channel.FixedFee.Decimal.Round(2)
 	if fixedFee.LessThan(decimal.Zero) || fixedFee.GreaterThanOrEqual(decimal.NewFromInt(10000)) {
 		return nil, ErrPaymentChannelConfigInvalid
+	}
+	if err := validatePaymentAmountForChannel(amount, channel); err != nil {
+		return nil, err
 	}
 
 	feeAmount := fixedFee
@@ -811,6 +817,25 @@ func shouldUseCNYPaymentCurrency(channel *models.PaymentChannel) bool {
 	}
 	channelType := strings.ToLower(strings.TrimSpace(channel.ChannelType))
 	return channelType == constants.PaymentChannelTypeWechat || channelType == constants.PaymentChannelTypeAlipay
+}
+
+func validatePaymentAmountForChannel(amount decimal.Decimal, channel *models.PaymentChannel) error {
+	if channel == nil {
+		return nil
+	}
+	amountOverflow20_2 := decimal.NewFromInt(1000000000000000000)
+	if amount.GreaterThanOrEqual(amountOverflow20_2) {
+		return ErrPaymentAmountTooLarge
+	}
+	minAmount := channel.MinAmount.Decimal
+	maxAmount := channel.MaxAmount.Decimal
+	if minAmount.GreaterThan(decimal.Zero) && amount.LessThan(minAmount) {
+		return ErrPaymentAmountTooSmall
+	}
+	if maxAmount.GreaterThan(decimal.Zero) && amount.GreaterThan(maxAmount) {
+		return ErrPaymentAmountTooLarge
+	}
+	return nil
 }
 
 func validatePaymentCurrencyForChannel(currency string, channel *models.PaymentChannel) error {

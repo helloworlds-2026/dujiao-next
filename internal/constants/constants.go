@@ -54,6 +54,18 @@ const (
 	PaymentChannelTypeBalance   = "balance"
 )
 
+// 支付渠道付款角色常量
+const (
+	PaymentRoleGuest = "guest"
+	PaymentRoleMember  = "member"
+)
+
+// 支付付款类型常量
+const (
+	PaymentTypeWallet = "wallet"
+	PaymentTypeOrder  = "order"
+)
+
 // 支付交互方式常量
 const (
 	PaymentInteractionQR       = "qr"

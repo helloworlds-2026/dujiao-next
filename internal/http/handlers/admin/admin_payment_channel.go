@@ -16,16 +16,22 @@ import (
 
 // CreatePaymentChannelRequest 创建支付渠道请求
 type CreatePaymentChannelRequest struct {
-	Name            string                 `json:"name" binding:"required"`
-	Icon            *string                `json:"icon"`
-	ProviderType    string                 `json:"provider_type" binding:"required"`
-	ChannelType     string                 `json:"channel_type" binding:"required"`
-	InteractionMode string                 `json:"interaction_mode" binding:"required"`
-	FeeRate         *models.Money          `json:"fee_rate"`
-	FixedFee        *models.Money          `json:"fixed_fee"`
-	ConfigJSON      map[string]interface{} `json:"config_json"`
-	IsActive        *bool                  `json:"is_active"`
-	SortOrder       int                    `json:"sort_order"`
+	Name               string                 `json:"name" binding:"required"`
+	Icon               *string                `json:"icon"`
+	ProviderType       string                 `json:"provider_type" binding:"required"`
+	ChannelType        string                 `json:"channel_type" binding:"required"`
+	InteractionMode    string                 `json:"interaction_mode" binding:"required"`
+	FeeRate            *models.Money          `json:"fee_rate"`
+	FixedFee           *models.Money          `json:"fixed_fee"`
+	MinAmount          *models.Money          `json:"min_amount"`
+	MaxAmount          *models.Money          `json:"max_amount"`
+	HideAmountOutRange *bool                  `json:"hide_amount_out_range"`
+	PaymentRoles       []string               `json:"payment_roles"`
+	MemberLevels       []uint                 `json:"member_levels"`
+	PaymentTypes       []string               `json:"payment_types"`
+	ConfigJSON         map[string]interface{} `json:"config_json"`
+	IsActive           *bool                  `json:"is_active"`
+	SortOrder          int                    `json:"sort_order"`
 }
 
 // CreatePaymentChannel 创建支付渠道
@@ -42,6 +48,9 @@ func (h *Handler) CreatePaymentChannel(c *gin.Context) {
 		ChannelType:     req.ChannelType,
 		InteractionMode: req.InteractionMode,
 		ConfigJSON:      models.JSON(req.ConfigJSON),
+		PaymentRoles:    req.PaymentRoles,
+		MemberLevels:    req.MemberLevels,
+		PaymentTypes:    req.PaymentTypes,
 		SortOrder:       req.SortOrder,
 		IsActive:        true,
 	}
@@ -51,11 +60,20 @@ func (h *Handler) CreatePaymentChannel(c *gin.Context) {
 	if req.IsActive != nil {
 		channel.IsActive = *req.IsActive
 	}
+	if req.HideAmountOutRange != nil {
+		channel.HideAmountOutRange = *req.HideAmountOutRange
+	}
 	if req.FeeRate != nil {
 		channel.FeeRate = *req.FeeRate
 	}
 	if req.FixedFee != nil {
 		channel.FixedFee = *req.FixedFee
+	}
+	if req.MinAmount != nil {
+		channel.MinAmount = *req.MinAmount
+	}
+	if req.MaxAmount != nil {
+		channel.MaxAmount = *req.MaxAmount
 	}
 
 	if err := h.PaymentService.ValidateChannel(channel); err != nil {
@@ -81,16 +99,22 @@ func (h *Handler) CreatePaymentChannel(c *gin.Context) {
 
 // UpdatePaymentChannelRequest 更新支付渠道请求
 type UpdatePaymentChannelRequest struct {
-	Name            string                 `json:"name"`
-	Icon            *string                `json:"icon"`
-	ProviderType    string                 `json:"provider_type"`
-	ChannelType     string                 `json:"channel_type"`
-	InteractionMode string                 `json:"interaction_mode"`
-	FeeRate         *models.Money          `json:"fee_rate"`
-	FixedFee        *models.Money          `json:"fixed_fee"`
-	ConfigJSON      map[string]interface{} `json:"config_json"`
-	IsActive        *bool                  `json:"is_active"`
-	SortOrder       *int                   `json:"sort_order"`
+	Name               string                 `json:"name"`
+	Icon               *string                `json:"icon"`
+	ProviderType       string                 `json:"provider_type"`
+	ChannelType        string                 `json:"channel_type"`
+	InteractionMode    string                 `json:"interaction_mode"`
+	FeeRate            *models.Money          `json:"fee_rate"`
+	FixedFee           *models.Money          `json:"fixed_fee"`
+	MinAmount          *models.Money          `json:"min_amount"`
+	MaxAmount          *models.Money          `json:"max_amount"`
+	HideAmountOutRange *bool                  `json:"hide_amount_out_range"`
+	PaymentRoles       []string               `json:"payment_roles"`
+	MemberLevels       []uint                 `json:"member_levels"`
+	PaymentTypes       []string               `json:"payment_types"`
+	ConfigJSON         map[string]interface{} `json:"config_json"`
+	IsActive           *bool                  `json:"is_active"`
+	SortOrder          *int                   `json:"sort_order"`
 }
 
 // UpdatePaymentChannel 更新支付渠道
@@ -139,11 +163,29 @@ func (h *Handler) UpdatePaymentChannel(c *gin.Context) {
 	if req.FixedFee != nil {
 		channel.FixedFee = *req.FixedFee
 	}
+	if req.MinAmount != nil {
+		channel.MinAmount = *req.MinAmount
+	}
+	if req.MaxAmount != nil {
+		channel.MaxAmount = *req.MaxAmount
+	}
+	if req.PaymentRoles != nil {
+		channel.PaymentRoles = req.PaymentRoles
+	}
+	if req.MemberLevels != nil {
+		channel.MemberLevels = req.MemberLevels
+	}
+	if req.PaymentTypes != nil {
+		channel.PaymentTypes = req.PaymentTypes
+	}
 	if req.ConfigJSON != nil {
 		channel.ConfigJSON = models.JSON(req.ConfigJSON)
 	}
 	if req.IsActive != nil {
 		channel.IsActive = *req.IsActive
+	}
+	if req.HideAmountOutRange != nil {
+		channel.HideAmountOutRange = *req.HideAmountOutRange
 	}
 	if req.SortOrder != nil {
 		channel.SortOrder = *req.SortOrder

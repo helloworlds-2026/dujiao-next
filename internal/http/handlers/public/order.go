@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/dto"
 	"github.com/dujiao-next/internal/http/handlers/shared"
 	"github.com/dujiao-next/internal/http/response"
@@ -13,6 +14,7 @@ import (
 	"github.com/dujiao-next/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 // enrichOrderWithAllowedChannels 为订单详情附加允许的支付渠道ID
@@ -45,6 +47,13 @@ type CreateOrderRequest struct {
 	AffiliateCode       string                 `json:"affiliate_code"`
 	AffiliateVisitorKey string                 `json:"affiliate_visitor_key"`
 	ManualFormData      map[string]models.JSON `json:"manual_form_data"`
+}
+
+// OrderPaymentChannelsRequest 查询订单可用支付渠道请求
+type OrderPaymentChannelsRequest struct {
+	Amount  string             `json:"amount" binding:"required"`
+	OrderNo string             `json:"order_no"`
+	Items   []OrderItemRequest `json:"items"`
 }
 
 // PreviewOrder 订单金额预览
@@ -85,6 +94,87 @@ func (h *Handler) PreviewOrder(c *gin.Context) {
 	}
 
 	response.Success(c, preview)
+}
+
+// GetOrderPaymentChannels 获取当前用户订单可用支付渠道（按金额与商品范围过滤）
+func (h *Handler) GetOrderPaymentChannels(c *gin.Context) {
+	uid, ok := shared.GetUserID(c)
+	if !ok {
+		return
+	}
+
+	var req OrderPaymentChannelsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.RespondBindError(c, err)
+		return
+	}
+
+	amount, err := decimal.NewFromString(strings.TrimSpace(req.Amount))
+	if err != nil {
+		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
+		return
+	}
+	if amount.LessThanOrEqual(decimal.Zero) {
+		response.Success(c, []map[string]interface{}{})
+		return
+	}
+
+	user, _ := h.UserRepo.GetByID(uid)
+	channels, err := h.getAvailablePaymentChannels(&models.Money{Decimal: amount}, user, constants.PaymentTypeOrder)
+	if err != nil {
+		shared.RespondError(c, response.CodeInternal, "error.payment_fetch_failed", err)
+		return
+	}
+
+	var allowedIDs []uint
+	orderNo := strings.TrimSpace(req.OrderNo)
+	switch {
+	case orderNo != "":
+		order, orderErr := h.OrderService.GetOrderByUserOrderNo(orderNo, uid)
+		if orderErr != nil {
+			if errors.Is(orderErr, service.ErrOrderNotFound) {
+				shared.RespondError(c, response.CodeNotFound, "error.order_not_found", nil)
+				return
+			}
+			shared.RespondError(c, response.CodeInternal, "error.order_fetch_failed", orderErr)
+			return
+		}
+		allItems := append([]models.OrderItem{}, order.Items...)
+		for _, child := range order.Children {
+			allItems = append(allItems, child.Items...)
+		}
+		allowedIDs = h.PaymentService.GetAllowedChannelIDsForOrder(allItems)
+	case len(req.Items) > 0:
+		orderItems := make([]models.OrderItem, 0, len(req.Items))
+		for _, item := range req.Items {
+			if item.ProductID == 0 {
+				continue
+			}
+			orderItems = append(orderItems, models.OrderItem{ProductID: item.ProductID})
+		}
+		allowedIDs = h.PaymentService.GetAllowedChannelIDsForOrder(orderItems)
+	}
+
+	// nil 表示商品未限制渠道；空切片表示限制后无可用渠道。
+	if allowedIDs != nil {
+		allowedSet := make(map[uint]struct{}, len(allowedIDs))
+		for _, id := range allowedIDs {
+			allowedSet[id] = struct{}{}
+		}
+		filtered := make([]map[string]interface{}, 0, len(channels))
+		for _, channel := range channels {
+			channelID, ok := channel["id"].(uint)
+			if !ok {
+				continue
+			}
+			if _, matched := allowedSet[channelID]; matched {
+				filtered = append(filtered, channel)
+			}
+		}
+		channels = filtered
+	}
+
+	response.Success(c, channels)
 }
 
 // CreateOrder 创建订单

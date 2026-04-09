@@ -1,0 +1,162 @@
+name: Upstream Merge And Build Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      custom_branch:
+        description: Branch to check in private repos
+        required: false
+        default: main
+  schedule:
+    - cron: '30 2 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-merge-build-check
+  cancel-in-progress: false
+
+env:
+  CUSTOM_BRANCH: ${{ github.event.inputs.custom_branch || vars.CUSTOM_BRANCH || 'main' }}
+  GH_USERNAME: ${{ secrets.GH_USERNAME }}
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+  API_REPO_URL: ${{ vars.API_REPO_URL }}
+  USER_REPO_URL: ${{ vars.USER_REPO_URL }}
+  ADMIN_REPO_URL: ${{ vars.ADMIN_REPO_URL }}
+
+  API_UPSTREAM_URL: ${{ vars.API_UPSTREAM_URL || 'https://github.com/dujiao-next/dujiao-next.git' }}
+  USER_UPSTREAM_URL: ${{ vars.USER_UPSTREAM_URL || 'https://github.com/dujiao-next/user.git' }}
+  ADMIN_UPSTREAM_URL: ${{ vars.ADMIN_UPSTREAM_URL || 'https://github.com/dujiao-next/admin.git' }}
+
+  ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+
+jobs:
+  merge-and-build:
+    name: Merge check and build all repos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate required configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          missing=0
+          for v in GH_USERNAME GH_TOKEN API_REPO_URL USER_REPO_URL ADMIN_REPO_URL; do
+            if [ -z "${!v:-}" ]; then
+              echo "::error::Missing required value: $v"
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            echo "Please set repository variables/secrets before running this workflow." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Sync with upstream and build
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          with_auth() {
+            local url="$1"
+            if [[ "$url" =~ ^https://github.com/ ]]; then
+              printf '%s' "https://${GH_USERNAME}:${GH_TOKEN}@${url#https://}"
+            else
+              printf '%s' "$url"
+            fi
+          }
+
+          run_one() {
+            local name="$1"
+            local repo_url="$2"
+            local upstream_url="$3"
+            local branch="$4"
+
+            local repo_auth_url upstream_auth_url
+            repo_auth_url="$(with_auth "$repo_url")"
+            upstream_auth_url="$(with_auth "$upstream_url")"
+
+            echo ""
+            echo "=== [$name] clone and merge-check ==="
+
+            git clone --filter=blob:none "$repo_auth_url" "$name"
+            cd "$name"
+
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+            git remote add upstream "$upstream_auth_url"
+            git fetch --prune origin "$branch"
+
+            if ! git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+              echo "::error::[$name] branch origin/$branch not found"
+              cd ..
+              return 1
+            fi
+
+            git checkout -B "$branch" "origin/$branch"
+            git fetch --prune upstream main
+
+            if git merge --no-commit --no-ff "upstream/main"; then
+              echo "[$name] merge-check passed"
+              git merge --abort || true
+            else
+              echo "::error::[$name] merge conflict with upstream/main"
+              git merge --abort || true
+              cd ..
+              return 1
+            fi
+
+            echo "=== [$name] build ==="
+            if [ "$name" = "api" ]; then
+              go mod download
+              go build -trimpath -o /tmp/api-server ./cmd/server
+            else
+              npm ci
+              npm run build
+            fi
+
+            cd ..
+            return 0
+          }
+
+          failed=0
+
+          run_one api "$API_REPO_URL" "$API_UPSTREAM_URL" "$CUSTOM_BRANCH" || failed=1
+          run_one user "$USER_REPO_URL" "$USER_UPSTREAM_URL" "$CUSTOM_BRANCH" || failed=1
+          run_one admin "$ADMIN_REPO_URL" "$ADMIN_UPSTREAM_URL" "$CUSTOM_BRANCH" || failed=1
+
+          if [ "$failed" -ne 0 ]; then
+            echo "One or more repositories failed merge-check/build." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          {
+            echo "## Upstream Merge And Build Check"
+            echo "- Branch: $CUSTOM_BRANCH"
+            echo "- Result: success"
+            echo "- Repositories: api, user, admin"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Optional webhook alert on failure
+        if: ${{ failure() && env.ALERT_WEBHOOK_URL != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          payload="{\"text\":\"[dujiao-next] Upstream merge/build check failed. Branch=${CUSTOM_BRANCH}. Run=${run_url}\"}"
+          curl -sS -X POST -H "Content-Type: application/json" -d "$payload" "$ALERT_WEBHOOK_URL"

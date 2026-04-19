@@ -13,6 +13,7 @@ import (
 	"github.com/dujiao-next/internal/http/response"
 	"github.com/dujiao-next/internal/i18n"
 	"github.com/dujiao-next/internal/models"
+	"github.com/dujiao-next/internal/repository"
 	"github.com/dujiao-next/internal/service"
 	"github.com/dujiao-next/internal/version"
 
@@ -125,12 +126,30 @@ func (h *Handler) GetConfig(c *gin.Context) {
 		return
 	}
 
-	publicChannels, err := h.PaymentService.GetAvailableChannels(service.AvailablePaymentChannelFilter{
-		PaymentType: constants.PaymentTypeOrder,
+	channels, _, err := h.PaymentService.ListChannels(repository.PaymentChannelListFilter{
+		Page:       1,
+		PageSize:   200,
+		ActiveOnly: true,
 	})
 	if err != nil {
 		shared.RespondError(c, response.CodeInternal, "error.config_fetch_failed", err)
 		return
+	}
+	publicChannels := make([]map[string]interface{}, 0, len(channels))
+	for _, channel := range channels {
+		ch := map[string]interface{}{
+			"id":               channel.ID,
+			"name":             channel.Name,
+			"provider_type":    channel.ProviderType,
+			"channel_type":     channel.ChannelType,
+			"interaction_mode": channel.InteractionMode,
+			"fee_rate":         channel.FeeRate,
+			"fixed_fee":        channel.FixedFee,
+		}
+		if channel.Icon != "" {
+			ch["icon"] = channel.Icon
+		}
+		publicChannels = append(publicChannels, ch)
 	}
 	data["payment_channels"] = publicChannels
 
@@ -145,6 +164,16 @@ func (h *Handler) GetConfig(c *gin.Context) {
 		}
 	}
 
+	// 访问控制配置
+	accessConfigVal, _ := h.SettingService.GetByKey(constants.SettingKeyAccessConfig)
+	if accessConfigVal != nil {
+		if requireLogin, ok := accessConfigVal["require_login"]; ok {
+			data["require_login"] = requireLogin
+		}
+		if enableGuestOrders, ok := accessConfigVal["enable_guest_orders"]; ok {
+			data["enable_guest_orders"] = enableGuestOrders
+		}
+	}
 	if h.CaptchaService != nil {
 		publicCaptcha, captchaErr := h.CaptchaService.GetPublicSetting()
 		if captchaErr != nil {

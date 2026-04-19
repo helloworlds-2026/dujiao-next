@@ -386,7 +386,8 @@ const (
 	SettingFieldSiteCurrency           = "currency"
 	SettingFieldPaymentExpireMinutes   = "payment_expire_minutes"
 
-	SettingKeyNavConfig = "nav_config"
+	SettingKeyNavConfig    = "nav_config"
+	SettingKeyAccessConfig = "access_config"
 
 	SettingKeyWalletConfig        = "wallet_config"
 	SettingFieldWalletOnlyPayment = "wallet_only_payment"
@@ -395,7 +396,6 @@ const (
 	SettingFieldRegistrationEnabled      = "registration_enabled"
 	SettingFieldEmailVerificationEnabled = "email_verification_enabled"
 )
-	SettingKeyAccessConfig = "access_config"
 
 // 币种常量
 const (

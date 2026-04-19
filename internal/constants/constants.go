@@ -54,6 +54,12 @@ const (
 	PaymentChannelTypeBalance   = "balance"
 )
 
+// 支付渠道付款角色常量
+const (
+	PaymentRoleGuest  = "guest"
+	PaymentRoleMember = "member"
+)
+
 // 支付交互方式常量
 const (
 	PaymentInteractionQR       = "qr"
@@ -395,6 +401,19 @@ const (
 	SettingKeyRegistrationConfig         = "registration_config"
 	SettingFieldRegistrationEnabled      = "registration_enabled"
 	SettingFieldEmailVerificationEnabled = "email_verification_enabled"
+
+	SettingKeyOrderRiskControlConfig = "order_risk_control_config"
+
+	SettingKeyCallbackRoutesConfig = "callback_routes_config"
+	SettingFieldPaymentCallback    = "payment_callback"
+	SettingFieldPaypalWebhook      = "paypal_webhook"
+	SettingFieldStripeWebhook      = "stripe_webhook"
+	SettingFieldUpstreamCallback   = "upstream_callback"
+
+	DefaultPaymentCallbackPath  = "/api/v1/payments/callback"
+	DefaultPaypalWebhookPath    = "/api/v1/payments/webhook/paypal"
+	DefaultStripeWebhookPath    = "/api/v1/payments/webhook/stripe"
+	DefaultUpstreamCallbackPath = "/api/v1/upstream/callback"
 )
 
 // 币种常量

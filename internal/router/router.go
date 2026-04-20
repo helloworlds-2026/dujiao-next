@@ -185,6 +185,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 		channelAPI.Use(ChannelAPIAuthMiddleware(c))
 		{
 			channelAPI.GET("/telegram/config", channelHandler.GetBotConfig)
+			channelAPI.GET("/telegram/auth-config", channelHandler.GetTelegramAuthConfig)
 			channelAPI.POST("/telegram/heartbeat", channelHandler.ReportHeartbeat)
 			channelAPI.POST("/identities/telegram/resolve", channelHandler.ResolveTelegramIdentity)
 			channelAPI.POST("/identities/telegram/provision", channelHandler.ProvisionTelegramIdentity)

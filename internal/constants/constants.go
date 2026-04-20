@@ -164,6 +164,12 @@ const (
 	OkpayCallbackFail    = `{"status":"fail"}`
 )
 
+// 支付业务类型常量
+const (
+	PaymentTypeOrder  = "order"
+	PaymentTypeWallet = "wallet"
+)
+
 // TokenPay 回调常量
 const (
 	TokenPayCallbackSuccess = "ok"

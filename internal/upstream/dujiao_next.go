@@ -55,6 +55,22 @@ func (a *DujiaoNextAdapter) Ping(ctx context.Context) (*PingResult, error) {
 	return &result.PingResult, nil
 }
 
+// ListCategories 拉取上游分类列表
+func (a *DujiaoNextAdapter) ListCategories(ctx context.Context) (*CategoryListResult, error) {
+	var result struct {
+		OK         bool               `json:"ok"`
+		Categories []UpstreamCategory `json:"categories"`
+	}
+	if err := a.doRequest(ctx, http.MethodGet, "/api/v1/upstream/categories", nil, &result); err != nil {
+		// 旧版上游不支持分类 API，返回空列表
+		if strings.Contains(err.Error(), "status 404") {
+			return &CategoryListResult{Supported: false, Categories: []UpstreamCategory{}}, nil
+		}
+		return nil, err
+	}
+	return &CategoryListResult{Supported: true, Categories: result.Categories}, nil
+}
+
 // ListProducts 拉取上游商品列表
 func (a *DujiaoNextAdapter) ListProducts(ctx context.Context, opts ListProductsOpts) (*ProductListResult, error) {
 	path := fmt.Sprintf("/api/v1/upstream/products?page=%d&page_size=%d", opts.Page, opts.PageSize)

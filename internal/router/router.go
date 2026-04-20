@@ -169,6 +169,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 		upstreamAPI.Use(UpstreamAPIAuthMiddleware(c.ApiCredentialRepo))
 		{
 			upstreamAPI.POST("/ping", upstreamHandler.Ping)
+			upstreamAPI.GET("/categories", upstreamHandler.ListCategories)
 			upstreamAPI.GET("/products", upstreamHandler.ListProducts)
 			upstreamAPI.GET("/products/:id", upstreamHandler.GetProduct)
 			upstreamAPI.POST("/orders", upstreamHandler.CreateOrder)
@@ -343,6 +344,9 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				authorized.GET("/orders/:id/fulfillment/download", adminHandler.AdminDownloadFulfillment)
 				authorized.PATCH("/orders/:id", adminHandler.AdminUpdateOrderStatus)
 				authorized.POST("/orders/:id/refund-to-wallet", adminHandler.AdminRefundOrderToWallet)
+				authorized.POST("/orders/:id/manual-refund", adminHandler.AdminManualRefundOrder)
+				authorized.GET("/order-refunds", adminHandler.GetAdminOrderRefunds)
+				authorized.GET("/order-refunds/:id", adminHandler.GetAdminOrderRefund)
 				authorized.POST("/fulfillments", adminHandler.AdminCreateFulfillment)
 				authorized.POST("/card-secrets/batch", adminHandler.CreateCardSecretBatch)
 				authorized.POST("/card-secrets/import", adminHandler.ImportCardSecretCSV)
@@ -434,6 +438,8 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				authorized.POST("/product-mappings/batch-status", adminHandler.BatchUpdateProductMappingStatus)
 				authorized.POST("/product-mappings/batch-delete", adminHandler.BatchDeleteProductMappings)
 				authorized.GET("/upstream-products", adminHandler.ListUpstreamProducts)
+				authorized.GET("/upstream-categories", adminHandler.ListUpstreamCategories)
+				authorized.POST("/product-mappings/batch-import-by-category", adminHandler.BatchImportByCategory)
 
 				// 采购单管理
 				authorized.GET("/procurement-orders", adminHandler.GetProcurementOrders)

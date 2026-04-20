@@ -134,6 +134,45 @@ func (h *Handler) Ping(c *gin.Context) {
 	})
 }
 
+// ---- ListCategories ----
+
+// upstreamCategory 上游分类响应格式
+type upstreamCategory struct {
+	ID        uint        `json:"id"`
+	ParentID  uint        `json:"parent_id"`
+	Slug      string      `json:"slug"`
+	Name      models.JSON `json:"name"`
+	Icon      string      `json:"icon"`
+	SortOrder int         `json:"sort_order"`
+}
+
+// ListCategories GET /api/v1/upstream/categories
+func (h *Handler) ListCategories(c *gin.Context) {
+	categories, err := h.CategoryRepo.List()
+	if err != nil {
+		logger.Errorw("upstream_list_categories_failed", "error", err)
+		errorResponse(c, http.StatusInternalServerError, "internal_error", "failed to list categories")
+		return
+	}
+
+	items := make([]upstreamCategory, 0, len(categories))
+	for _, cat := range categories {
+		items = append(items, upstreamCategory{
+			ID:        cat.ID,
+			ParentID:  cat.ParentID,
+			Slug:      cat.Slug,
+			Name:      cat.NameJSON,
+			Icon:      cat.Icon,
+			SortOrder: cat.SortOrder,
+		})
+	}
+
+	successResponse(c, gin.H{
+		"ok":         true,
+		"categories": items,
+	})
+}
+
 // ---- ListProducts ----
 
 // upstreamProduct 上游商品响应格式
@@ -489,13 +528,36 @@ func (h *Handler) GetOrder(c *gin.Context) {
 		return
 	}
 
+	status := strings.ToLower(strings.TrimSpace(order.Status))
+	localRefundRecords := make([]models.JSON, 0)
+
+	// 优先使用采购单视角的上游退款信息，避免订单状态与上游退款状态不一致。
+	if h.ProcurementOrderService != nil {
+		procOrder, procErr := h.ProcurementOrderService.GetByLocalOrderNo(order.OrderNo)
+		if procErr == nil && procOrder != nil {
+			switch strings.ToLower(strings.TrimSpace(procOrder.Status)) {
+			case constants.ProcurementStatusPartiallyRefunded, constants.ProcurementStatusRefunded:
+				status = strings.ToLower(strings.TrimSpace(procOrder.Status))
+			}
+		}
+	}
+
+	// refund_records 固定返回本地退款记录（与更上游无关），由服务层统一处理。
+	if records, recordsErr := h.OrderService.BuildLocalRefundRecordsForOrder(order); recordsErr != nil {
+		logger.Warnw("upstream_get_order_refund_records_failed", "order_id", order.ID, "error", recordsErr)
+	} else {
+		localRefundRecords = records
+	}
+
 	resp := gin.H{
-		"ok":       true,
-		"order_id": order.ID,
-		"order_no": order.OrderNo,
-		"status":   order.Status,
-		"amount":   order.TotalAmount.StringFixed(2),
-		"currency": order.Currency,
+		"ok":              true,
+		"order_id":        order.ID,
+		"order_no":        order.OrderNo,
+		"status":          status,
+		"amount":          order.TotalAmount.StringFixed(2),
+		"refunded_amount": order.RefundedAmount.StringFixed(2),
+		"currency":        order.Currency,
+		"refund_records":  localRefundRecords,
 	}
 
 	// 若已交付，返回交付信息（优先使用订单自身的 fulfillment，否则从子订单获取）
@@ -726,13 +788,14 @@ func (b *bodyBuf) Read(p []byte) (n int, err error) {
 
 // mapCallbackStatus 将上游订单状态映射为回调处理状态
 func mapCallbackStatus(status string) string {
-	switch status {
-	case "delivered", "completed":
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	switch normalized {
+	case "delivered", "completed", "fulfilled":
 		return "delivered"
-	case "canceled":
+	case "canceled", "cancelled":
 		return "canceled"
 	default:
-		return status
+		return normalized
 	}
 }
 

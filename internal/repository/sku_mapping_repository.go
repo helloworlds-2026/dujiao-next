@@ -14,6 +14,7 @@ type SKUMappingRepository interface {
 	GetByLocalSKUID(skuID uint) (*models.SKUMapping, error)
 	GetByMappingAndUpstreamSKUID(productMappingID, upstreamSKUID uint) (*models.SKUMapping, error)
 	ListByProductMapping(productMappingID uint) ([]models.SKUMapping, error)
+	ListByProductMappingIDs(productMappingIDs []uint) ([]models.SKUMapping, error)
 	WithTx(tx *gorm.DB) SKUMappingRepository
 	Create(mapping *models.SKUMapping) error
 	Update(mapping *models.SKUMapping) error
@@ -72,6 +73,17 @@ func (r *GormSKUMappingRepository) GetByMappingAndUpstreamSKUID(productMappingID
 func (r *GormSKUMappingRepository) ListByProductMapping(productMappingID uint) ([]models.SKUMapping, error) {
 	var mappings []models.SKUMapping
 	if err := r.db.Where("product_mapping_id = ?", productMappingID).Find(&mappings).Error; err != nil {
+		return nil, err
+	}
+	return mappings, nil
+}
+
+func (r *GormSKUMappingRepository) ListByProductMappingIDs(productMappingIDs []uint) ([]models.SKUMapping, error) {
+	if len(productMappingIDs) == 0 {
+		return nil, nil
+	}
+	var mappings []models.SKUMapping
+	if err := r.db.Where("product_mapping_id IN ?", productMappingIDs).Find(&mappings).Error; err != nil {
 		return nil, err
 	}
 	return mappings, nil

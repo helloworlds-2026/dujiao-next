@@ -1005,6 +1005,7 @@ func (h *Handler) GetGuestOrderByOrderNo(c *gin.Context) {
 	}
 	orderDetail := dto.NewOrderDetailTruncated(order)
 	h.enrichOrderWithAllowedChannels(order, &orderDetail)
+	h.enrichOrderWithRefundRecords(order, &orderDetail)
 	response.Success(c, orderDetail)
 }
 

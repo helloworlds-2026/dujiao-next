@@ -19,6 +19,7 @@ type CategoryRepository interface {
 	CountChildren(categoryID string) (int64, error)
 	CountProducts(categoryID string) (int64, error)
 	CountActiveProducts(categoryID string) (int64, error)
+	GetBySlug(slug string) (*models.Category, error)
 }
 
 // GormCategoryRepository GORM 实现
@@ -96,6 +97,18 @@ func (r *GormCategoryRepository) CountProducts(categoryID string) (int64, error)
 		return 0, err
 	}
 	return count, nil
+}
+
+// GetBySlug 根据 slug 获取分类
+func (r *GormCategoryRepository) GetBySlug(slug string) (*models.Category, error) {
+	var category models.Category
+	if err := r.db.Where("slug = ?", slug).First(&category).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &category, nil
 }
 
 // CountActiveProducts 统计某分类下已上架商品数

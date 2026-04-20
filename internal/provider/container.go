@@ -35,6 +35,7 @@ type Container struct {
 	CouponUsageRepo        repository.CouponUsageRepository
 	PromotionRepo          repository.PromotionRepository
 	WalletRepo             repository.WalletRepository
+	OrderRefundRecordRepo  repository.OrderRefundRecordRepository
 	PostRepo               repository.PostRepository
 	CategoryRepo           repository.CategoryRepository
 	BannerRepo             repository.BannerRepository
@@ -72,6 +73,7 @@ type Container struct {
 	SettingService            *service.SettingService
 	CartService               *service.CartService
 	WalletService             *service.WalletService
+	OrderRefundService        *service.OrderRefundService
 	OrderService              *service.OrderService
 	FulfillmentService        *service.FulfillmentService
 	CouponAdminService        *service.CouponAdminService
@@ -152,6 +154,7 @@ func (c *Container) initRepositories() {
 	c.CouponUsageRepo = repository.NewCouponUsageRepository(db)
 	c.PromotionRepo = repository.NewPromotionRepository(db)
 	c.WalletRepo = repository.NewWalletRepository(db)
+	c.OrderRefundRecordRepo = repository.NewOrderRefundRecordRepository(db)
 	c.PostRepo = repository.NewPostRepository(db)
 	c.CategoryRepo = repository.NewCategoryRepository(db)
 	c.BannerRepo = repository.NewBannerRepository(db)
@@ -188,7 +191,7 @@ func (c *Container) initServices() {
 		panic(err)
 	}
 
-	c.SettingService = service.NewSettingService(c.SettingRepo)
+	c.SettingService = service.NewSettingService(c.SettingRepo, c.Config.Order)
 	smtpSetting, err := c.SettingService.GetSMTPSetting(c.Config.Email)
 	if err != nil {
 		logger.Warnw("provider_load_smtp_setting_failed", "error", err)
@@ -221,26 +224,28 @@ func (c *Container) initServices() {
 	c.PostService = service.NewPostService(c.PostRepo)
 	c.CategoryService = service.NewCategoryService(c.CategoryRepo)
 	c.CartService = service.NewCartService(c.CartRepo, c.ProductRepo, c.ProductSKURepo, c.PromotionRepo, c.SettingService)
-	c.WalletService = service.NewWalletService(c.WalletRepo, c.OrderRepo, c.UserRepo, c.AffiliateService)
+	c.WalletService = service.NewWalletService(c.WalletRepo, c.OrderRepo, c.UserRepo, c.AffiliateService, c.SettingService)
+	c.OrderRefundService = service.NewOrderRefundService(c.OrderRepo, c.UserRepo, c.OrderRefundRecordRepo, c.AffiliateService, c.SettingService)
 	c.MemberLevelService = service.NewMemberLevelService(c.MemberLevelRepo, c.MemberLevelPriceRepo, c.UserRepo)
 	c.OrderRiskControlService = service.NewOrderRiskControlService(c.SettingService, c.OrderRepo)
 	c.OrderService = service.NewOrderService(service.OrderServiceOptions{
-		OrderRepo:          c.OrderRepo,
-		UserRepo:           c.UserRepo,
-		ProductRepo:        c.ProductRepo,
-		ProductSKURepo:     c.ProductSKURepo,
-		CardSecretRepo:     c.CardSecretRepo,
-		CouponRepo:         c.CouponRepo,
-		CouponUsageRepo:    c.CouponUsageRepo,
-		PromotionRepo:      c.PromotionRepo,
-		QueueClient:        c.QueueClient,
-		SettingService:     c.SettingService,
-		DefaultEmailConfig: c.Config.Email,
-		WalletService:      c.WalletService,
-		AffiliateService:   c.AffiliateService,
-		MemberLevelService: c.MemberLevelService,
-		RiskControlService: c.OrderRiskControlService,
-		ExpireMinutes:      c.Config.Order.PaymentExpireMinutes,
+		OrderRepo:             c.OrderRepo,
+		OrderRefundRecordRepo: c.OrderRefundRecordRepo,
+		UserRepo:              c.UserRepo,
+		ProductRepo:           c.ProductRepo,
+		ProductSKURepo:        c.ProductSKURepo,
+		CardSecretRepo:        c.CardSecretRepo,
+		CouponRepo:            c.CouponRepo,
+		CouponUsageRepo:       c.CouponUsageRepo,
+		PromotionRepo:         c.PromotionRepo,
+		QueueClient:           c.QueueClient,
+		SettingService:        c.SettingService,
+		DefaultEmailConfig:    c.Config.Email,
+		WalletService:         c.WalletService,
+		AffiliateService:      c.AffiliateService,
+		MemberLevelService:    c.MemberLevelService,
+		RiskControlService:    c.OrderRiskControlService,
+		ExpireMinutes:         c.Config.Order.PaymentExpireMinutes,
 	})
 	c.FulfillmentService = service.NewFulfillmentService(
 		c.OrderRepo, c.FulfillmentRepo, c.CardSecretRepo, c.QueueClient,
@@ -260,6 +265,7 @@ func (c *Container) initServices() {
 	c.ApiCredentialService = service.NewApiCredentialService(c.ApiCredentialRepo)
 	c.SiteConnectionService = service.NewSiteConnectionService(c.SiteConnectionRepo, c.Config.App.SecretKey, "uploads")
 	c.ProductMappingService = service.NewProductMappingService(c.ProductMappingRepo, c.SKUMappingRepo, c.ProductRepo, c.ProductSKURepo, c.CategoryRepo, c.SiteConnectionService)
+	c.ProductMappingService.SetCategoryService(c.CategoryService)
 	c.DownstreamCallbackService = service.NewDownstreamCallbackService(c.DownstreamOrderRefRepo, c.OrderRepo, c.ApiCredentialRepo, c.QueueClient)
 	c.PaymentService = service.NewPaymentService(service.PaymentServiceOptions{
 		OrderRepo:             c.OrderRepo,

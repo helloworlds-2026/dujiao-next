@@ -35,6 +35,10 @@ func (r *failingSKUMappingRepo) ListByProductMapping(productMappingID uint) ([]m
 	return nil, nil
 }
 
+func (r *failingSKUMappingRepo) ListByProductMappingIDs(productMappingIDs []uint) ([]models.SKUMapping, error) {
+	return nil, nil
+}
+
 func (r *failingSKUMappingRepo) WithTx(tx *gorm.DB) repository.SKUMappingRepository {
 	return r
 }

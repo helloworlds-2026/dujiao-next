@@ -338,3 +338,61 @@ func (h *Handler) ListUpstreamProducts(c *gin.Context) {
 		"mapped_ids": mappedIDs,
 	})
 }
+
+// ListUpstreamCategories 获取上游分类列表
+func (h *Handler) ListUpstreamCategories(c *gin.Context) {
+	connectionID, err := shared.ParseQueryUint(c.Query("connection_id"), true)
+	if err != nil || connectionID == 0 {
+		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
+		return
+	}
+
+	categories, supported, err := h.ProductMappingService.ListUpstreamCategories(connectionID)
+	if err != nil {
+		if errors.Is(err, service.ErrConnectionNotFound) {
+			shared.RespondError(c, response.CodeNotFound, "error.connection_not_found", nil)
+			return
+		}
+		shared.RespondError(c, response.CodeInternal, "error.upstream_categories_fetch_failed", err)
+		return
+	}
+
+	response.Success(c, gin.H{
+		"supported":  supported,
+		"categories": categories,
+	})
+}
+
+// BatchImportByCategoryRequest 按分类批量导入请求
+type BatchImportByCategoryRequest struct {
+	ConnectionID       uint `json:"connection_id" binding:"required"`
+	UpstreamCategoryID uint `json:"upstream_category_id" binding:"required"`
+	AutoCreateCategory bool `json:"auto_create_category"`
+	LocalCategoryID    uint `json:"local_category_id"`
+}
+
+// BatchImportByCategory 按上游分类批量导入
+func (h *Handler) BatchImportByCategory(c *gin.Context) {
+	var req BatchImportByCategoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		shared.RespondBindError(c, err)
+		return
+	}
+
+	result, err := h.ProductMappingService.BatchImportByCategory(
+		req.ConnectionID,
+		req.UpstreamCategoryID,
+		req.AutoCreateCategory,
+		req.LocalCategoryID,
+	)
+	if err != nil {
+		if errors.Is(err, service.ErrConnectionNotFound) {
+			shared.RespondError(c, response.CodeNotFound, "error.connection_not_found", nil)
+			return
+		}
+		shared.RespondError(c, response.CodeInternal, "error.category_import_failed", err)
+		return
+	}
+
+	response.Success(c, result)
+}

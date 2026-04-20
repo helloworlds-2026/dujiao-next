@@ -123,8 +123,8 @@ func (h *Handler) GetProducts(c *gin.Context) {
 		logger.Warnw("channel_catalog_apply_stock", "error", err)
 	}
 
-	// 批量解析映射商品的真实交付类型
-	fulfillmentTypeMap := h.resolveEffectiveFulfillmentTypes(products)
+	// 批量解析映射商品的真实交付类型，并将上游 SKU 库存写回到本地库存字段
+	fulfillmentTypeMap := h.applyUpstreamMappings(products)
 
 	currency, err := h.SettingService.GetSiteCurrency("CNY")
 	if err != nil {
@@ -229,6 +229,7 @@ func (h *Handler) GetProductDetail(c *gin.Context) {
 	if err := h.ProductService.ApplyAutoStockCounts(stockSlice); err != nil {
 		logger.Warnw("channel_catalog_apply_stock_detail", "error", err)
 	}
+	fulfillmentTypeMap := h.applyUpstreamMappings(stockSlice)
 	*product = stockSlice[0]
 
 	currency, err := h.SettingService.GetSiteCurrency("CNY")
@@ -237,17 +238,9 @@ func (h *Handler) GetProductDetail(c *gin.Context) {
 		currency = "CNY"
 	}
 
-	// 解析映射商品的真实交付类型
 	effectiveFT := product.FulfillmentType
-	if product.IsMapped && product.FulfillmentType == constants.FulfillmentTypeUpstream {
-		mapping, err := h.ProductMappingRepo.GetByLocalProductID(product.ID)
-		if err == nil && mapping != nil {
-			eft := mapping.UpstreamFulfillmentType
-			if eft != constants.FulfillmentTypeAuto {
-				eft = constants.FulfillmentTypeManual
-			}
-			effectiveFT = eft
-		}
+	if eft, ok := fulfillmentTypeMap[product.ID]; ok {
+		effectiveFT = eft
 	}
 
 	title := resolveLocalizedJSON(product.TitleJSON, locale, defaultLocale)
@@ -460,9 +453,11 @@ func localizedFieldText(raw interface{}, locale, defaultLocale string) string {
 // computeStockCount 计算可用库存数量（-1 表示无限库存）
 func computeStockCount(fulfillmentType string, autoStockAvailable int64, manualStockTotal int) int64 {
 	if fulfillmentType == "auto" {
+		if autoStockAvailable < 0 {
+			return -1
+		}
 		return autoStockAvailable
 	}
-	// manual: -1 表示无限库存
 	return int64(manualStockTotal)
 }
 
@@ -473,27 +468,35 @@ func normalizeChannelMaxPurchaseQuantity(value int) int {
 	return value
 }
 
-// computeStockStatus 计算库存状态
+// computeStockStatus 计算库存状态。
+// 对 auto 与 manual 两种类型，库存值 < 0 一律视为无限库存（in_stock）。
 func computeStockStatus(fulfillmentType string, autoStockAvailable int64, manualStockTotal int) string {
 	if fulfillmentType == "auto" {
-		if autoStockAvailable > 0 {
+		if autoStockAvailable < 0 || autoStockAvailable > 0 {
 			return "in_stock"
 		}
 		return "out_of_stock"
 	}
-	// manual: -1 表示无限库存
-	if manualStockTotal < 0 {
-		return "in_stock"
-	}
-	if manualStockTotal > 0 {
+	if manualStockTotal < 0 || manualStockTotal > 0 {
 		return "in_stock"
 	}
 	return "out_of_stock"
 }
 
-// resolveEffectiveFulfillmentTypes 批量解析映射商品的真实交付类型
-func (h *Handler) resolveEffectiveFulfillmentTypes(products []models.Product) map[uint]string {
-	result := make(map[uint]string)
+// applyUpstreamMappings 一次性完成 upstream 映射商品的处理：
+//  1. 批量解析每个映射商品的真实交付类型（auto / manual）；
+//  2. 批量拉取 SKU 映射，并将上游库存写回 Product/SKU 的本地库存字段，
+//     使下游 computeStockStatus / computeStockCount 无需感知 upstream 即可正确工作。
+//
+// 返回 productID -> displayFulfillmentType 映射，调用方据此决定对外展示的交付类型。
+// 必须在 ApplyAutoStockCounts 之后调用。
+//
+// 降级语义（与 web 端 decorateUpstreamStock 一致）：
+//   - 没有 ProductMapping：视作有货（写无限库存），避免脏数据导致误报缺货；
+//   - 有 mapping 但所有 SKU 映射均未激活：视作缺货（库存写 0）。
+func (h *Handler) applyUpstreamMappings(products []models.Product) map[uint]string {
+	ftMap := make(map[uint]string)
+
 	var mappedIDs []uint
 	for _, p := range products {
 		if p.IsMapped && p.FulfillmentType == constants.FulfillmentTypeUpstream {
@@ -501,19 +504,152 @@ func (h *Handler) resolveEffectiveFulfillmentTypes(products []models.Product) ma
 		}
 	}
 	if len(mappedIDs) == 0 {
-		return result
+		return ftMap
 	}
+
 	mappings, err := h.ProductMappingRepo.ListByLocalProductIDs(mappedIDs)
 	if err != nil {
-		logger.Warnw("resolve_effective_fulfillment_types_failed", "error", err)
-		return result
+		logger.Warnw("channel_catalog_list_product_mappings", "error", err)
+		// 整批查询失败时降级为有货：避免数据库抖动让所有商品全部缺货
+		for _, id := range mappedIDs {
+			ftMap[id] = constants.FulfillmentTypeManual
+		}
+		setProductsUnlimited(products, ftMap)
+		return ftMap
 	}
-	for _, m := range mappings {
+
+	mappingByProduct := make(map[uint]*models.ProductMapping, len(mappings))
+	mappingIDs := make([]uint, 0, len(mappings))
+	for i := range mappings {
+		m := &mappings[i]
+		mappingByProduct[m.LocalProductID] = m
+		mappingIDs = append(mappingIDs, m.ID)
 		ft := m.UpstreamFulfillmentType
 		if ft != constants.FulfillmentTypeAuto {
 			ft = constants.FulfillmentTypeManual
 		}
-		result[m.LocalProductID] = ft
+		ftMap[m.LocalProductID] = ft
 	}
-	return result
+
+	// 没有 mapping 记录的 mapped 商品：降级为有货
+	for _, id := range mappedIDs {
+		if _, ok := mappingByProduct[id]; !ok {
+			ftMap[id] = constants.FulfillmentTypeManual
+		}
+	}
+
+	skuMappings, err := h.SKUMappingRepo.ListByProductMappingIDs(mappingIDs)
+	if err != nil {
+		logger.Warnw("channel_catalog_list_sku_mappings", "error", err)
+		setProductsUnlimited(products, ftMap)
+		return ftMap
+	}
+
+	// 按 productMappingID 分桶
+	skusByMapping := make(map[uint][]*models.SKUMapping, len(mappingIDs))
+	for i := range skuMappings {
+		sm := &skuMappings[i]
+		skusByMapping[sm.ProductMappingID] = append(skusByMapping[sm.ProductMappingID], sm)
+	}
+
+	for i := range products {
+		p := &products[i]
+		displayType, ok := ftMap[p.ID]
+		if !ok {
+			continue
+		}
+
+		mapping := mappingByProduct[p.ID]
+		if mapping == nil {
+			// 无 mapping：写无限库存
+			writeProductStock(p, displayType, -1)
+			continue
+		}
+
+		smByLocal := make(map[uint]*models.SKUMapping)
+		for _, sm := range skusByMapping[mapping.ID] {
+			smByLocal[sm.LocalSKUID] = sm
+		}
+
+		hasUnlimited := false
+		hasActiveMapping := false
+		totalStock := 0
+
+		for j := range p.SKUs {
+			sku := &p.SKUs[j]
+			sm, ok := smByLocal[sku.ID]
+			if !ok || !sm.UpstreamIsActive {
+				writeSKUStock(sku, displayType, 0)
+				continue
+			}
+			hasActiveMapping = true
+			writeSKUStock(sku, displayType, sm.UpstreamStock)
+
+			if sm.UpstreamStock < 0 {
+				hasUnlimited = true
+			} else {
+				totalStock += sm.UpstreamStock
+			}
+		}
+
+		switch {
+		case !hasActiveMapping:
+			writeProductStock(p, displayType, 0)
+		case hasUnlimited:
+			writeProductStock(p, displayType, -1)
+		default:
+			writeProductStock(p, displayType, totalStock)
+		}
+	}
+
+	return ftMap
+}
+
+// writeProductStock 按 displayType 把库存值写回 Product 的对应字段。stock<0 表示无限。
+func writeProductStock(p *models.Product, displayType string, stock int) {
+	if displayType == constants.FulfillmentTypeAuto {
+		if stock < 0 {
+			p.AutoStockAvailable = -1
+		} else {
+			p.AutoStockAvailable = int64(stock)
+		}
+		return
+	}
+	if stock < 0 {
+		p.ManualStockTotal = constants.ManualStockUnlimited
+	} else {
+		p.ManualStockTotal = stock
+	}
+}
+
+// writeSKUStock 同 writeProductStock，作用于 SKU。
+func writeSKUStock(sku *models.ProductSKU, displayType string, stock int) {
+	if displayType == constants.FulfillmentTypeAuto {
+		if stock < 0 {
+			sku.AutoStockAvailable = -1
+		} else {
+			sku.AutoStockAvailable = int64(stock)
+		}
+		return
+	}
+	if stock < 0 {
+		sku.ManualStockTotal = constants.ManualStockUnlimited
+	} else {
+		sku.ManualStockTotal = stock
+	}
+}
+
+// setProductsUnlimited 把 ftMap 中列出的所有商品（含其 SKU）置为无限库存。用于查询失败的降级。
+func setProductsUnlimited(products []models.Product, ftMap map[uint]string) {
+	for i := range products {
+		p := &products[i]
+		dt, ok := ftMap[p.ID]
+		if !ok {
+			continue
+		}
+		writeProductStock(p, dt, -1)
+		for j := range p.SKUs {
+			writeSKUStock(&p.SKUs[j], dt, -1)
+		}
+	}
 }

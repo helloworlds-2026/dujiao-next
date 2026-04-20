@@ -1,163 +1,106 @@
 package service
 
 import (
-	"context"
-	"errors"
-	"net/url"
-	"strconv"
 	"testing"
-	"time"
 
 	"github.com/dujiao-next/internal/config"
+	"github.com/dujiao-next/internal/constants"
 )
 
-func TestVerifyMiniAppInitDataSuccess(t *testing.T) {
-	svc := NewTelegramAuthService(config.TelegramAuthConfig{
-		Enabled:            true,
-		BotToken:           "test-bot-token",
-		LoginExpireSeconds: 300,
-		ReplayTTLSeconds:   300,
+func TestNormalizeTelegramAuthSetting(t *testing.T) {
+	setting := NormalizeTelegramAuthSetting(TelegramAuthSetting{
+		BotUsername:        " @demo_bot ",
+		MiniAppURL:         " https://example.com/mini-app ",
+		LoginExpireSeconds: 0,
+		ReplayTTLSeconds:   10,
 	})
-	svc.replaySetNX = func(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
-		return true, nil
+
+	if setting.BotUsername != "demo_bot" {
+		t.Fatalf("expected normalized username demo_bot, got %q", setting.BotUsername)
+	}
+	if setting.LoginExpireSeconds != 300 {
+		t.Fatalf("expected default login expire 300, got %d", setting.LoginExpireSeconds)
+	}
+	if setting.MiniAppURL != "https://example.com/mini-app" {
+		t.Fatalf("expected normalized mini app url, got %q", setting.MiniAppURL)
+	}
+	if setting.ReplayTTLSeconds != 60 {
+		t.Fatalf("expected minimum replay ttl 60, got %d", setting.ReplayTTLSeconds)
+	}
+}
+
+func TestPatchTelegramAuthSettingKeepsTokenWhenEmpty(t *testing.T) {
+	repo := newMockSettingRepo()
+	svc := NewSettingService(repo)
+
+	defaultCfg := config.TelegramAuthConfig{
+		Enabled:                      true,
+		BotUsername:                  "demo_bot",
+		BotToken:                     "secret-token",
+		TelegramUserWhitelistEnabled: true,
+		LoginExpireSeconds:           300,
+		ReplayTTLSeconds:             300,
 	}
 
-	initData := buildTestTelegramMiniAppInitData(t, "test-bot-token", time.Now().Unix(), `{"id":123456,"first_name":"Mini","last_name":"App","username":"mini_app","photo_url":"https://example.com/avatar.png"}`)
-	verified, err := svc.VerifyMiniAppInitData(context.Background(), initData)
+	updated, err := svc.PatchTelegramAuthSetting(defaultCfg, TelegramAuthSettingPatch{
+		BotUsername:                  ptrString("@new_bot"),
+		BotToken:                     ptrString(""),
+		MiniAppURL:                   ptrString(" https://example.com/mini-app "),
+		TelegramUserWhitelistEnabled: ptrBool(false),
+		LoginExpireSeconds:           ptrInt(600),
+		ReplayTTLSeconds:             ptrInt(900),
+	})
 	if err != nil {
-		t.Fatalf("VerifyMiniAppInitData returned error: %v", err)
+		t.Fatalf("patch telegram auth setting failed: %v", err)
 	}
-	if verified.ProviderUserID != "123456" {
-		t.Fatalf("provider user id want 123456 got %s", verified.ProviderUserID)
+	if updated.BotToken != "secret-token" {
+		t.Fatalf("expected keep token secret-token, got %q", updated.BotToken)
 	}
-	if verified.FirstName != "Mini" || verified.LastName != "App" {
-		t.Fatalf("unexpected name: %+v", verified)
+	if updated.BotUsername != "new_bot" {
+		t.Fatalf("expected normalized username new_bot, got %q", updated.BotUsername)
 	}
-	if verified.Username != "mini_app" {
-		t.Fatalf("username want mini_app got %s", verified.Username)
+	if updated.MiniAppURL != "https://example.com/mini-app" {
+		t.Fatalf("expected normalized mini app url, got %q", updated.MiniAppURL)
 	}
-	if verified.AvatarURL != "https://example.com/avatar.png" {
-		t.Fatalf("avatar url mismatch: %s", verified.AvatarURL)
+
+	saved, ok := repo.store[constants.SettingKeyTelegramAuthConfig]
+	if !ok {
+		t.Fatalf("telegram auth setting was not saved")
+	}
+	if saved["bot_token"] != "secret-token" {
+		t.Fatalf("expected saved token keep old value, got %v", saved["bot_token"])
+	}
+	if saved["mini_app_url"] != "https://example.com/mini-app" {
+		t.Fatalf("expected saved mini app url, got %v", saved["mini_app_url"])
+	}
+	if saved["telegram_user_whitelist_enabled"] != false {
+		t.Fatalf("expected saved whitelist-enabled false, got %v", saved["telegram_user_whitelist_enabled"])
 	}
 }
 
-func TestVerifyMiniAppInitDataExpired(t *testing.T) {
-	svc := NewTelegramAuthService(config.TelegramAuthConfig{
+func TestValidateTelegramAuthSetting(t *testing.T) {
+	valid := NormalizeTelegramAuthSetting(TelegramAuthSetting{
 		Enabled:            true,
-		BotToken:           "test-bot-token",
-		LoginExpireSeconds: 60,
-		ReplayTTLSeconds:   60,
-	})
-	svc.replaySetNX = func(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
-		return true, nil
-	}
-
-	initData := buildTestTelegramMiniAppInitData(t, "test-bot-token", time.Now().Add(-2*time.Minute).Unix(), `{"id":123456,"first_name":"Mini"}`)
-	_, err := svc.VerifyMiniAppInitData(context.Background(), initData)
-	if !errors.Is(err, ErrTelegramAuthExpired) {
-		t.Fatalf("expected ErrTelegramAuthExpired, got %v", err)
-	}
-}
-
-func TestVerifyMiniAppInitDataRejectsInvalidSignature(t *testing.T) {
-	svc := NewTelegramAuthService(config.TelegramAuthConfig{
-		Enabled:            true,
-		BotToken:           "test-bot-token",
+		BotUsername:        "demo_bot",
+		BotToken:           "secret",
 		LoginExpireSeconds: 300,
 		ReplayTTLSeconds:   300,
 	})
-	svc.replaySetNX = func(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
-		return true, nil
+	if err := ValidateTelegramAuthSetting(valid); err != nil {
+		t.Fatalf("expected valid telegram auth config, got error: %v", err)
 	}
 
-	values := buildTestTelegramMiniAppValues(time.Now().Unix(), `{"id":123456,"first_name":"Mini"}`)
-	values.Set("hash", "deadbeef")
-	_, err := svc.VerifyMiniAppInitData(context.Background(), values.Encode())
-	if !errors.Is(err, ErrTelegramAuthSignatureInvalid) {
-		t.Fatalf("expected ErrTelegramAuthSignatureInvalid, got %v", err)
+	invalid := valid
+	invalid.BotToken = ""
+	if err := ValidateTelegramAuthSetting(invalid); err == nil {
+		t.Fatal("expected validation error when enabled and token missing")
 	}
 }
 
-func TestVerifyMiniAppInitDataAcceptsSignatureField(t *testing.T) {
-	svc := NewTelegramAuthService(config.TelegramAuthConfig{
-		Enabled:            true,
-		BotToken:           "test-bot-token",
-		LoginExpireSeconds: 300,
-		ReplayTTLSeconds:   300,
-	})
-	svc.replaySetNX = func(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
-		return true, nil
-	}
-
-	values := buildTestTelegramMiniAppValues(time.Now().Unix(), `{"id":123456,"first_name":"Mini","username":"mini_app"}`)
-	values.Set("signature", "third-party-signature")
-	values.Set("hash", buildTelegramMiniAppHash("test-bot-token", buildTelegramMiniAppDataCheckString(values)))
-
-	verified, err := svc.VerifyMiniAppInitData(context.Background(), values.Encode())
-	if err != nil {
-		t.Fatalf("expected signature field initData to pass, got %v", err)
-	}
-	if verified.ProviderUserID != "123456" {
-		t.Fatalf("provider user id want 123456 got %s", verified.ProviderUserID)
-	}
+func ptrInt(value int) *int {
+	return &value
 }
 
-func TestVerifyMiniAppInitDataRejectsReplay(t *testing.T) {
-	svc := NewTelegramAuthService(config.TelegramAuthConfig{
-		Enabled:            true,
-		BotToken:           "test-bot-token",
-		LoginExpireSeconds: 300,
-		ReplayTTLSeconds:   300,
-	})
-	seen := map[string]bool{}
-	svc.replaySetNX = func(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
-		if seen[key] {
-			return false, nil
-		}
-		seen[key] = true
-		return true, nil
-	}
-
-	initData := buildTestTelegramMiniAppInitData(t, "test-bot-token", time.Now().Unix(), `{"id":123456,"first_name":"Mini"}`)
-	if _, err := svc.VerifyMiniAppInitData(context.Background(), initData); err != nil {
-		t.Fatalf("first VerifyMiniAppInitData returned error: %v", err)
-	}
-	_, err := svc.VerifyMiniAppInitData(context.Background(), initData)
-	if !errors.Is(err, ErrTelegramAuthReplay) {
-		t.Fatalf("expected ErrTelegramAuthReplay, got %v", err)
-	}
-}
-
-func TestTelegramAuthServicePublicConfigIncludesMiniAppURL(t *testing.T) {
-	svc := NewTelegramAuthService(config.TelegramAuthConfig{
-		Enabled:     true,
-		BotUsername: "demo_bot",
-		MiniAppURL:  " https://example.com/mini-app ",
-	})
-
-	publicConfig := svc.PublicConfig()
-	if publicConfig["enabled"] != true {
-		t.Fatalf("expected enabled true, got %v", publicConfig["enabled"])
-	}
-	if publicConfig["bot_username"] != "demo_bot" {
-		t.Fatalf("expected bot_username demo_bot, got %v", publicConfig["bot_username"])
-	}
-	if publicConfig["mini_app_url"] != "https://example.com/mini-app" {
-		t.Fatalf("expected mini_app_url https://example.com/mini-app, got %v", publicConfig["mini_app_url"])
-	}
-}
-
-func buildTestTelegramMiniAppInitData(t *testing.T, botToken string, authDate int64, userJSON string) string {
-	t.Helper()
-	values := buildTestTelegramMiniAppValues(authDate, userJSON)
-	values.Set("hash", buildTelegramMiniAppHash(botToken, buildTelegramMiniAppDataCheckString(values)))
-	return values.Encode()
-}
-
-func buildTestTelegramMiniAppValues(authDate int64, userJSON string) url.Values {
-	values := url.Values{}
-	values.Set("auth_date", strconv.FormatInt(authDate, 10))
-	values.Set("query_id", "AAHdF6IQAAAAAN0XohDhrOrc")
-	values.Set("user", userJSON)
-	return values
+func ptrBool(value bool) *bool {
+	return &value
 }

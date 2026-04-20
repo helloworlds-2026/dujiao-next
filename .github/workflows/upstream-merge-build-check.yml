@@ -66,7 +66,7 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Sync with upstream, build and push
+      - name: Sync with upstream, build and push (all-or-nothing)
         shell: bash
         run: |
           set -euo pipefail
@@ -94,14 +94,21 @@ jobs:
             echo ""
             echo "=== [$name] clone and merge-check ==="
 
-            git clone --filter=blob:none "$repo_auth_url" "$name"
+            git clone --filter=blob:none "$repo_auth_url" "$name" || {
+              echo "::error::[$name] git clone failed"
+              return 1
+            }
             cd "$name"
 
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
             git remote add upstream "$upstream_auth_url"
-            git fetch --prune origin "$branch"
+            git fetch --prune origin "$branch" || {
+              echo "::error::[$name] fetch origin/$branch failed"
+              cd ..
+              return 1
+            }
 
             if ! git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
               echo "::error::[$name] branch origin/$branch not found"
@@ -109,8 +116,16 @@ jobs:
               return 1
             fi
 
-            git checkout -B "$branch" "origin/$branch"
-            git fetch --prune upstream main
+            git checkout -B "$branch" "origin/$branch" || {
+              echo "::error::[$name] checkout branch failed"
+              cd ..
+              return 1
+            }
+            git fetch --prune upstream main || {
+              echo "::error::[$name] fetch upstream/main failed"
+              cd ..
+              return 1
+            }
 
             before_sha="$(git rev-parse HEAD)"
             if git merge --no-ff --no-edit "upstream/main"; then
@@ -123,23 +138,39 @@ jobs:
               fi
             else
               echo "::error::[$name] merge conflict with upstream/main"
+              git merge --abort || true
               cd ..
               return 1
             fi
 
             echo "=== [$name] build ==="
             if [ "$name" = "api" ]; then
-              go mod download
-              go build -trimpath -o /tmp/api-server ./cmd/server
+              go mod download || {
+                echo "::error::[$name] go mod download failed"
+                cd ..
+                return 1
+              }
+              go build -trimpath -o /tmp/api-server ./cmd/server || {
+                echo "::error::[$name] go build failed"
+                cd ..
+                return 1
+              }
             else
-              npm ci
-              npm run build
+              npm ci || {
+                echo "::error::[$name] npm ci failed"
+                cd ..
+                return 1
+              }
+              npm run build || {
+                echo "::error::[$name] npm run build failed"
+                cd ..
+                return 1
+              }
             fi
 
             if [ "$merged" -eq 1 ]; then
-              echo "=== [$name] push merged commit ==="
-              git push origin "HEAD:$branch"
-              echo "[$name] pushed merged commit to origin/$branch"
+              printf '%s\n' "$name" >> ../_repos_to_push.txt
+              echo "[$name] queued for push after all repositories pass"
             else
               echo "[$name] skip push (no upstream changes)"
             fi
@@ -148,23 +179,56 @@ jobs:
             return 0
           }
 
-          failed=0
+          push_one() {
+            local name="$1"
+            local branch="$2"
 
-          run_one api "$API_REPO_URL" "$API_UPSTREAM_URL" "$CUSTOM_BRANCH" || failed=1
-          run_one user "$USER_REPO_URL" "$USER_UPSTREAM_URL" "$CUSTOM_BRANCH" || failed=1
-          run_one admin "$ADMIN_REPO_URL" "$ADMIN_UPSTREAM_URL" "$CUSTOM_BRANCH" || failed=1
+            [ -d "$name/.git" ] || {
+              echo "::error::[$name] repo directory missing before push"
+              return 1
+            }
+
+            echo "=== [$name] push merged commit ==="
+            cd "$name"
+            git push origin "HEAD:$branch" || {
+              echo "::error::[$name] push failed"
+              cd ..
+              return 1
+            }
+            cd ..
+            echo "[$name] pushed merged commit to origin/$branch"
+            return 0
+          }
+
+          failed=0
+          : > _repos_to_push.txt
+
+          if ! run_one api "$API_REPO_URL" "$API_UPSTREAM_URL" "$CUSTOM_BRANCH"; then
+            failed=1
+          fi
+          if ! run_one user "$USER_REPO_URL" "$USER_UPSTREAM_URL" "$CUSTOM_BRANCH"; then
+            failed=1
+          fi
+          if ! run_one admin "$ADMIN_REPO_URL" "$ADMIN_UPSTREAM_URL" "$CUSTOM_BRANCH"; then
+            failed=1
+          fi
 
           if [ "$failed" -ne 0 ]; then
             echo "One or more repositories failed merge-check/build." >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 
+          while IFS= read -r repo_name; do
+            [ -z "$repo_name" ] && continue
+            push_one "$repo_name" "$CUSTOM_BRANCH"
+          done < _repos_to_push.txt
+
           {
             echo "## Upstream Merge And Build Check"
             echo "- Branch: $CUSTOM_BRANCH"
             echo "- Result: success"
             echo "- Repositories: api, user, admin"
-            echo "- Action: merge from upstream/main, build, push to your fork branch when changed"
+            echo "- Action: merge from upstream/main, build all repos, then push merged commits when all pass"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Optional webhook alert on failure

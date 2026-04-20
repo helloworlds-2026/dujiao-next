@@ -41,6 +41,24 @@ func (h *Handler) GetBotConfig(c *gin.Context) {
 	})
 }
 
+// GetTelegramAuthConfig GET /api/v1/channel/telegram/auth-config
+// 返回 Telegram 登录配置（仅渠道服务可见，包含 bot_token）。
+func (h *Handler) GetTelegramAuthConfig(c *gin.Context) {
+	setting, err := h.SettingService.GetTelegramAuthSetting(h.Config.TelegramAuth)
+	if err != nil {
+		respondChannelError(c, 500, 500, "internal_error", "error.internal_error", err)
+		return
+	}
+
+	respondChannelSuccess(c, gin.H{
+		"enabled":                         setting.Enabled,
+		"bot_token":                       setting.BotToken,
+		"bot_username":                    setting.BotUsername,
+		"mini_app_url":                    setting.MiniAppURL,
+		"telegram_user_whitelist_enabled": setting.TelegramUserWhitelistEnabled,
+	})
+}
+
 type reportHeartbeatRequest struct {
 	BotVersion       string   `json:"bot_version"`
 	WebhookStatus    string   `json:"webhook_status"`

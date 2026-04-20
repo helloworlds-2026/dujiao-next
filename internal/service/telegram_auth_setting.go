@@ -12,36 +12,39 @@ import (
 
 // TelegramAuthSetting Telegram 登录配置实体
 type TelegramAuthSetting struct {
-	Enabled               bool   `json:"enabled"`
-	BotUsername           string `json:"bot_username"`
-	BotToken              string `json:"bot_token"`
-	MiniAppURL            string `json:"mini_app_url"`
-	TelegramUserWhitelist string `json:"telegram_user_whitelist"`
-	LoginExpireSeconds    int    `json:"login_expire_seconds"`
-	ReplayTTLSeconds      int    `json:"replay_ttl_seconds"`
+	Enabled                      bool   `json:"enabled"`
+	BotUsername                  string `json:"bot_username"`
+	BotToken                     string `json:"bot_token"`
+	MiniAppURL                   string `json:"mini_app_url"`
+	TelegramUserWhitelistEnabled bool   `json:"telegram_user_whitelist_enabled"`
+	TelegramUserWhitelist        string `json:"telegram_user_whitelist"`
+	LoginExpireSeconds           int    `json:"login_expire_seconds"`
+	ReplayTTLSeconds             int    `json:"replay_ttl_seconds"`
 }
 
 // TelegramAuthSettingPatch Telegram 登录配置补丁
 type TelegramAuthSettingPatch struct {
-	Enabled               *bool   `json:"enabled"`
-	BotUsername           *string `json:"bot_username"`
-	BotToken              *string `json:"bot_token"`
-	MiniAppURL            *string `json:"mini_app_url"`
-	TelegramUserWhitelist *string `json:"telegram_user_whitelist"`
-	LoginExpireSeconds    *int    `json:"login_expire_seconds"`
-	ReplayTTLSeconds      *int    `json:"replay_ttl_seconds"`
+	Enabled                      *bool   `json:"enabled"`
+	BotUsername                  *string `json:"bot_username"`
+	BotToken                     *string `json:"bot_token"`
+	MiniAppURL                   *string `json:"mini_app_url"`
+	TelegramUserWhitelistEnabled *bool   `json:"telegram_user_whitelist_enabled"`
+	TelegramUserWhitelist        *string `json:"telegram_user_whitelist"`
+	LoginExpireSeconds           *int    `json:"login_expire_seconds"`
+	ReplayTTLSeconds             *int    `json:"replay_ttl_seconds"`
 }
 
 // TelegramAuthDefaultSetting 根据运行时配置生成默认设置
 func TelegramAuthDefaultSetting(cfg config.TelegramAuthConfig) TelegramAuthSetting {
 	return NormalizeTelegramAuthSetting(TelegramAuthSetting{
-		Enabled:               cfg.Enabled,
-		BotUsername:           strings.TrimSpace(cfg.BotUsername),
-		BotToken:              strings.TrimSpace(cfg.BotToken),
-		MiniAppURL:            strings.TrimSpace(cfg.MiniAppURL),
-		TelegramUserWhitelist: strings.TrimSpace(cfg.TelegramUserWhitelist),
-		LoginExpireSeconds:    cfg.LoginExpireSeconds,
-		ReplayTTLSeconds:      cfg.ReplayTTLSeconds,
+		Enabled:                      cfg.Enabled,
+		BotUsername:                  strings.TrimSpace(cfg.BotUsername),
+		BotToken:                     strings.TrimSpace(cfg.BotToken),
+		MiniAppURL:                   strings.TrimSpace(cfg.MiniAppURL),
+		TelegramUserWhitelistEnabled: cfg.TelegramUserWhitelistEnabled,
+		TelegramUserWhitelist:        strings.TrimSpace(cfg.TelegramUserWhitelist),
+		LoginExpireSeconds:           cfg.LoginExpireSeconds,
+		ReplayTTLSeconds:             cfg.ReplayTTLSeconds,
 	})
 }
 
@@ -106,13 +109,14 @@ func ValidateTelegramAuthSetting(setting TelegramAuthSetting) error {
 func TelegramAuthSettingToConfig(setting TelegramAuthSetting) config.TelegramAuthConfig {
 	normalized := NormalizeTelegramAuthSetting(setting)
 	return config.TelegramAuthConfig{
-		Enabled:               normalized.Enabled,
-		BotUsername:           normalized.BotUsername,
-		BotToken:              normalized.BotToken,
-		MiniAppURL:            normalized.MiniAppURL,
-		TelegramUserWhitelist: normalized.TelegramUserWhitelist,
-		LoginExpireSeconds:    normalized.LoginExpireSeconds,
-		ReplayTTLSeconds:      normalized.ReplayTTLSeconds,
+		Enabled:                      normalized.Enabled,
+		BotUsername:                  normalized.BotUsername,
+		BotToken:                     normalized.BotToken,
+		MiniAppURL:                   normalized.MiniAppURL,
+		TelegramUserWhitelistEnabled: normalized.TelegramUserWhitelistEnabled,
+		TelegramUserWhitelist:        normalized.TelegramUserWhitelist,
+		LoginExpireSeconds:           normalized.LoginExpireSeconds,
+		ReplayTTLSeconds:             normalized.ReplayTTLSeconds,
 	}
 }
 
@@ -120,13 +124,14 @@ func TelegramAuthSettingToConfig(setting TelegramAuthSetting) config.TelegramAut
 func TelegramAuthSettingToMap(setting TelegramAuthSetting) map[string]interface{} {
 	normalized := NormalizeTelegramAuthSetting(setting)
 	return map[string]interface{}{
-		"enabled":                 normalized.Enabled,
-		"bot_username":            normalized.BotUsername,
-		"bot_token":               normalized.BotToken,
-		"mini_app_url":            normalized.MiniAppURL,
-		"telegram_user_whitelist": normalized.TelegramUserWhitelist,
-		"login_expire_seconds":    normalized.LoginExpireSeconds,
-		"replay_ttl_seconds":      normalized.ReplayTTLSeconds,
+		"enabled":                         normalized.Enabled,
+		"bot_username":                    normalized.BotUsername,
+		"bot_token":                       normalized.BotToken,
+		"mini_app_url":                    normalized.MiniAppURL,
+		"telegram_user_whitelist_enabled": normalized.TelegramUserWhitelistEnabled,
+		"telegram_user_whitelist":         normalized.TelegramUserWhitelist,
+		"login_expire_seconds":            normalized.LoginExpireSeconds,
+		"replay_ttl_seconds":              normalized.ReplayTTLSeconds,
 	}
 }
 
@@ -134,14 +139,15 @@ func TelegramAuthSettingToMap(setting TelegramAuthSetting) map[string]interface{
 func MaskTelegramAuthSettingForAdmin(setting TelegramAuthSetting) models.JSON {
 	normalized := NormalizeTelegramAuthSetting(setting)
 	return models.JSON{
-		"enabled":                 normalized.Enabled,
-		"bot_username":            normalized.BotUsername,
-		"bot_token":               "",
-		"has_bot_token":           normalized.BotToken != "",
-		"mini_app_url":            normalized.MiniAppURL,
-		"telegram_user_whitelist": normalized.TelegramUserWhitelist,
-		"login_expire_seconds":    normalized.LoginExpireSeconds,
-		"replay_ttl_seconds":      normalized.ReplayTTLSeconds,
+		"enabled":                         normalized.Enabled,
+		"bot_username":                    normalized.BotUsername,
+		"bot_token":                       "",
+		"has_bot_token":                   normalized.BotToken != "",
+		"mini_app_url":                    normalized.MiniAppURL,
+		"telegram_user_whitelist_enabled": normalized.TelegramUserWhitelistEnabled,
+		"telegram_user_whitelist":         normalized.TelegramUserWhitelist,
+		"login_expire_seconds":            normalized.LoginExpireSeconds,
+		"replay_ttl_seconds":              normalized.ReplayTTLSeconds,
 	}
 }
 
@@ -182,6 +188,9 @@ func (s *SettingService) PatchTelegramAuthSetting(defaultCfg config.TelegramAuth
 	if patch.MiniAppURL != nil {
 		next.MiniAppURL = strings.TrimSpace(*patch.MiniAppURL)
 	}
+	if patch.TelegramUserWhitelistEnabled != nil {
+		next.TelegramUserWhitelistEnabled = *patch.TelegramUserWhitelistEnabled
+	}
 	if patch.TelegramUserWhitelist != nil {
 		next.TelegramUserWhitelist = strings.TrimSpace(*patch.TelegramUserWhitelist)
 	}
@@ -211,6 +220,7 @@ func telegramAuthSettingFromJSON(raw models.JSON, fallback TelegramAuthSetting) 
 	next.BotUsername = readString(raw, "bot_username", next.BotUsername)
 	next.BotToken = readString(raw, "bot_token", next.BotToken)
 	next.MiniAppURL = readString(raw, "mini_app_url", next.MiniAppURL)
+	next.TelegramUserWhitelistEnabled = readBool(raw, "telegram_user_whitelist_enabled", next.TelegramUserWhitelistEnabled)
 	next.TelegramUserWhitelist = readString(raw, "telegram_user_whitelist", next.TelegramUserWhitelist)
 	next.LoginExpireSeconds = readInt(raw, "login_expire_seconds", next.LoginExpireSeconds)
 	next.ReplayTTLSeconds = readInt(raw, "replay_ttl_seconds", next.ReplayTTLSeconds)

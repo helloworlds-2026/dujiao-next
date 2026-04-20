@@ -11,7 +11,7 @@ on:
     - cron: '30 2 * * *'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: upstream-merge-build-check
@@ -66,7 +66,7 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Sync with upstream and build
+      - name: Sync with upstream, build and push
         shell: bash
         run: |
           set -euo pipefail
@@ -85,6 +85,7 @@ jobs:
             local repo_url="$2"
             local upstream_url="$3"
             local branch="$4"
+            local before_sha after_sha merged=0
 
             local repo_auth_url upstream_auth_url
             repo_auth_url="$(with_auth "$repo_url")"
@@ -111,12 +112,17 @@ jobs:
             git checkout -B "$branch" "origin/$branch"
             git fetch --prune upstream main
 
-            if git merge --no-commit --no-ff "upstream/main"; then
-              echo "[$name] merge-check passed"
-              git merge --abort || true
+            before_sha="$(git rev-parse HEAD)"
+            if git merge --no-ff --no-edit "upstream/main"; then
+              after_sha="$(git rev-parse HEAD)"
+              if [ "$before_sha" != "$after_sha" ]; then
+                merged=1
+                echo "[$name] merged upstream/main into $branch"
+              else
+                echo "[$name] already up-to-date with upstream/main"
+              fi
             else
               echo "::error::[$name] merge conflict with upstream/main"
-              git merge --abort || true
               cd ..
               return 1
             fi
@@ -128,6 +134,14 @@ jobs:
             else
               npm ci
               npm run build
+            fi
+
+            if [ "$merged" -eq 1 ]; then
+              echo "=== [$name] push merged commit ==="
+              git push origin "HEAD:$branch"
+              echo "[$name] pushed merged commit to origin/$branch"
+            else
+              echo "[$name] skip push (no upstream changes)"
             fi
 
             cd ..
@@ -150,6 +164,7 @@ jobs:
             echo "- Branch: $CUSTOM_BRANCH"
             echo "- Result: success"
             echo "- Repositories: api, user, admin"
+            echo "- Action: merge from upstream/main, build, push to your fork branch when changed"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Optional webhook alert on failure

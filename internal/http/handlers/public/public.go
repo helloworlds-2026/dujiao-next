@@ -228,6 +228,53 @@ func (h *Handler) GetConfig(c *gin.Context) {
 	response.Success(c, data)
 }
 
+// GetTelegramAccess 检查 Telegram 用户是否允许登录（用于前端在 Mini App/Widget 场景提前提示）。
+func (h *Handler) GetTelegramAccess(c *gin.Context) {
+	telegramUserID := strings.TrimSpace(c.Query("telegram_user_id"))
+	if telegramUserID == "" {
+		telegramUserID = strings.TrimSpace(c.Query("channel_user_id"))
+	}
+	if telegramUserID == "" {
+		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
+		return
+	}
+
+	parsedID, err := strconv.ParseInt(telegramUserID, 10, 64)
+	if err != nil || parsedID <= 0 {
+		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
+		return
+	}
+
+	telegramService := h.TelegramAuthService
+	if telegramService == nil && h.Config != nil {
+		telegramService = service.NewTelegramAuthService(h.Config.TelegramAuth)
+	}
+	if telegramService == nil {
+		shared.RespondError(c, response.CodeInternal, "error.telegram_auth_config_invalid", nil)
+		return
+	}
+
+	checkErr := telegramService.CheckUserAllowedByProviderID(telegramUserID)
+	allowed := true
+	switch {
+	case checkErr == nil:
+		allowed = true
+	case errors.Is(checkErr, service.ErrTelegramAuthPayloadInvalid):
+		allowed = false
+	case errors.Is(checkErr, service.ErrTelegramAuthConfigInvalid):
+		shared.RespondError(c, response.CodeInternal, "error.telegram_auth_config_invalid", checkErr)
+		return
+	default:
+		shared.RespondError(c, response.CodeInternal, "error.login_failed", checkErr)
+		return
+	}
+
+	response.Success(c, gin.H{
+		"allowed":          allowed,
+		"telegram_user_id": strconv.FormatInt(parsedID, 10),
+	})
+}
+
 // GetPublicMemberLevels 获取公共会员等级列表
 func (h *Handler) GetPublicMemberLevels(c *gin.Context) {
 	levels, err := h.MemberLevelService.ListActiveLevels()

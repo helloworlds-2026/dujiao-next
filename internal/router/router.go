@@ -78,6 +78,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 		public := apiV1.Group("/public")
 		{
 			public.GET("/config", publicHandler.GetConfig)
+			public.GET("/telegram/access", publicHandler.GetTelegramAccess)
 			public.GET("/products", publicHandler.GetProducts)
 			public.GET("/products/:slug", publicHandler.GetProductBySlug)
 			public.GET("/posts", publicHandler.GetPosts)

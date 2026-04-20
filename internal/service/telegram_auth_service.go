@@ -39,7 +39,7 @@ func (s *TelegramAuthService) CheckUserAllowedByProviderID(providerUserID string
 		return ErrTelegramAuthPayloadInvalid
 	}
 	cfg := normalizeTelegramAuthConfig(s.cfg)
-	allowed, allowErr := isTelegramUserAllowed(cfg.TelegramUserWhitelist, telegramID)
+	allowed, allowErr := isTelegramUserAllowed(cfg.TelegramUserWhitelistEnabled, cfg.TelegramUserWhitelist, telegramID)
 	if allowErr != nil {
 		return ErrTelegramAuthConfigInvalid
 	}
@@ -117,7 +117,7 @@ func (s *TelegramAuthService) VerifyLogin(ctx context.Context, payload TelegramL
 	if err != nil {
 		return nil, err
 	}
-	allowed, allowErr := isTelegramUserAllowed(cfg.TelegramUserWhitelist, normalized.ID)
+	allowed, allowErr := isTelegramUserAllowed(cfg.TelegramUserWhitelistEnabled, cfg.TelegramUserWhitelist, normalized.ID)
 	if allowErr != nil {
 		return nil, ErrTelegramAuthConfigInvalid
 	}
@@ -169,7 +169,7 @@ func (s *TelegramAuthService) VerifyMiniAppInitData(ctx context.Context, initDat
 	if err != nil {
 		return nil, err
 	}
-	allowed, allowErr := isTelegramUserAllowed(cfg.TelegramUserWhitelist, parsed.User.ID)
+	allowed, allowErr := isTelegramUserAllowed(cfg.TelegramUserWhitelistEnabled, cfg.TelegramUserWhitelist, parsed.User.ID)
 	if allowErr != nil {
 		return nil, ErrTelegramAuthConfigInvalid
 	}
@@ -219,7 +219,10 @@ func normalizeTelegramAuthConfig(cfg config.TelegramAuthConfig) config.TelegramA
 	return cfg
 }
 
-func isTelegramUserAllowed(whitelistRaw string, telegramID int64) (bool, error) {
+func isTelegramUserAllowed(whitelistEnabled bool, whitelistRaw string, telegramID int64) (bool, error) {
+	if !whitelistEnabled {
+		return true, nil
+	}
 	if strings.TrimSpace(whitelistRaw) == "" {
 		return true, nil
 	}

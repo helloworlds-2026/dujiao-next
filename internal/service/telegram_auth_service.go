@@ -29,6 +29,26 @@ type TelegramLoginPayload struct {
 	Hash      string
 }
 
+// CheckUserAllowedByProviderID 检查 Telegram 用户是否在白名单内。
+func (s *TelegramAuthService) CheckUserAllowedByProviderID(providerUserID string) error {
+	if s == nil {
+		return ErrTelegramAuthConfigInvalid
+	}
+	telegramID, err := strconv.ParseInt(strings.TrimSpace(providerUserID), 10, 64)
+	if err != nil || telegramID <= 0 {
+		return ErrTelegramAuthPayloadInvalid
+	}
+	cfg := normalizeTelegramAuthConfig(s.cfg)
+	allowed, allowErr := isTelegramUserAllowed(cfg.TelegramUserWhitelistEnabled, cfg.TelegramUserWhitelist, telegramID)
+	if allowErr != nil {
+		return ErrTelegramAuthConfigInvalid
+	}
+	if !allowed {
+		return ErrTelegramAuthPayloadInvalid
+	}
+	return nil
+}
+
 // TelegramIdentityVerified Telegram 身份校验结果
 type TelegramIdentityVerified struct {
 	Provider       string
@@ -97,6 +117,13 @@ func (s *TelegramAuthService) VerifyLogin(ctx context.Context, payload TelegramL
 	if err != nil {
 		return nil, err
 	}
+	allowed, allowErr := isTelegramUserAllowed(cfg.TelegramUserWhitelistEnabled, cfg.TelegramUserWhitelist, normalized.ID)
+	if allowErr != nil {
+		return nil, ErrTelegramAuthConfigInvalid
+	}
+	if !allowed {
+		return nil, ErrTelegramAuthPayloadInvalid
+	}
 
 	now := time.Now()
 	authAt := time.Unix(normalized.AuthDate, 0)
@@ -142,6 +169,13 @@ func (s *TelegramAuthService) VerifyMiniAppInitData(ctx context.Context, initDat
 	if err != nil {
 		return nil, err
 	}
+	allowed, allowErr := isTelegramUserAllowed(cfg.TelegramUserWhitelistEnabled, cfg.TelegramUserWhitelist, parsed.User.ID)
+	if allowErr != nil {
+		return nil, ErrTelegramAuthConfigInvalid
+	}
+	if !allowed {
+		return nil, ErrTelegramAuthPayloadInvalid
+	}
 
 	now := time.Now()
 	authAt := time.Unix(parsed.AuthDate, 0)
@@ -172,6 +206,7 @@ func (s *TelegramAuthService) VerifyMiniAppInitData(ctx context.Context, initDat
 func normalizeTelegramAuthConfig(cfg config.TelegramAuthConfig) config.TelegramAuthConfig {
 	cfg.BotUsername = strings.TrimSpace(cfg.BotUsername)
 	cfg.BotToken = strings.TrimSpace(cfg.BotToken)
+	cfg.TelegramUserWhitelist = normalizeTelegramUserWhitelist(cfg.TelegramUserWhitelist)
 	if cfg.LoginExpireSeconds <= 0 {
 		cfg.LoginExpireSeconds = 300
 	}
@@ -182,6 +217,25 @@ func normalizeTelegramAuthConfig(cfg config.TelegramAuthConfig) config.TelegramA
 		cfg.ReplayTTLSeconds = 60
 	}
 	return cfg
+}
+
+func isTelegramUserAllowed(whitelistEnabled bool, whitelistRaw string, telegramID int64) (bool, error) {
+	if !whitelistEnabled {
+		return true, nil
+	}
+	if strings.TrimSpace(whitelistRaw) == "" {
+		return true, nil
+	}
+	entries, err := parseTelegramUserWhitelist(whitelistRaw)
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if entry.TelegramID == telegramID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func normalizeTelegramLoginPayload(payload TelegramLoginPayload) (TelegramLoginPayload, error) {

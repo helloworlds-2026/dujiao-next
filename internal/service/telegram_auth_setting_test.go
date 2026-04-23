@@ -34,19 +34,21 @@ func TestPatchTelegramAuthSettingKeepsTokenWhenEmpty(t *testing.T) {
 	svc := NewSettingService(repo)
 
 	defaultCfg := config.TelegramAuthConfig{
-		Enabled:            true,
-		BotUsername:        "demo_bot",
-		BotToken:           "secret-token",
-		LoginExpireSeconds: 300,
-		ReplayTTLSeconds:   300,
+		Enabled:                      true,
+		BotUsername:                  "demo_bot",
+		BotToken:                     "secret-token",
+		TelegramUserWhitelistEnabled: true,
+		LoginExpireSeconds:           300,
+		ReplayTTLSeconds:             300,
 	}
 
 	updated, err := svc.PatchTelegramAuthSetting(defaultCfg, TelegramAuthSettingPatch{
-		BotUsername:        ptrString("@new_bot"),
-		BotToken:           ptrString(""),
-		MiniAppURL:         ptrString(" https://example.com/mini-app "),
-		LoginExpireSeconds: ptrInt(600),
-		ReplayTTLSeconds:   ptrInt(900),
+		BotUsername:                  ptrString("@new_bot"),
+		BotToken:                     ptrString(""),
+		MiniAppURL:                   ptrString(" https://example.com/mini-app "),
+		TelegramUserWhitelistEnabled: ptrBool(false),
+		LoginExpireSeconds:           ptrInt(600),
+		ReplayTTLSeconds:             ptrInt(900),
 	})
 	if err != nil {
 		t.Fatalf("patch telegram auth setting failed: %v", err)
@@ -71,6 +73,9 @@ func TestPatchTelegramAuthSettingKeepsTokenWhenEmpty(t *testing.T) {
 	if saved["mini_app_url"] != "https://example.com/mini-app" {
 		t.Fatalf("expected saved mini app url, got %v", saved["mini_app_url"])
 	}
+	if saved["telegram_user_whitelist_enabled"] != false {
+		t.Fatalf("expected saved whitelist-enabled false, got %v", saved["telegram_user_whitelist_enabled"])
+	}
 }
 
 func TestValidateTelegramAuthSetting(t *testing.T) {
@@ -93,5 +98,9 @@ func TestValidateTelegramAuthSetting(t *testing.T) {
 }
 
 func ptrInt(value int) *int {
+	return &value
+}
+
+func ptrBool(value bool) *bool {
 	return &value
 }

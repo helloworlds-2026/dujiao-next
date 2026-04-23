@@ -95,12 +95,14 @@ type BootstrapConfig struct {
 
 // TelegramAuthConfig Telegram 登录配置
 type TelegramAuthConfig struct {
-	Enabled            bool   `mapstructure:"enabled"`
-	BotUsername        string `mapstructure:"bot_username"`
-	BotToken           string `mapstructure:"bot_token"`
-	MiniAppURL         string `mapstructure:"mini_app_url"`
-	LoginExpireSeconds int    `mapstructure:"login_expire_seconds"`
-	ReplayTTLSeconds   int    `mapstructure:"replay_ttl_seconds"`
+	Enabled                      bool   `mapstructure:"enabled"`
+	BotUsername                  string `mapstructure:"bot_username"`
+	BotToken                     string `mapstructure:"bot_token"`
+	MiniAppURL                   string `mapstructure:"mini_app_url"`
+	TelegramUserWhitelistEnabled bool   `mapstructure:"telegram_user_whitelist_enabled"`
+	TelegramUserWhitelist        string `mapstructure:"telegram_user_whitelist"`
+	LoginExpireSeconds           int    `mapstructure:"login_expire_seconds"`
+	ReplayTTLSeconds             int    `mapstructure:"replay_ttl_seconds"`
 }
 
 // RedisConfig Redis 配置
@@ -294,6 +296,8 @@ func Load() *Config {
 	viper.SetDefault("telegram_auth.enabled", false)
 	viper.SetDefault("telegram_auth.bot_username", "")
 	viper.SetDefault("telegram_auth.bot_token", "")
+	viper.SetDefault("telegram_auth.telegram_user_whitelist_enabled", false)
+	viper.SetDefault("telegram_auth.telegram_user_whitelist", "")
 	viper.SetDefault("telegram_auth.login_expire_seconds", 300)
 	viper.SetDefault("telegram_auth.replay_ttl_seconds", 300)
 	viper.SetDefault("redis.enabled", true)
@@ -355,7 +359,7 @@ func Load() *Config {
 	viper.SetDefault("email.verify_code.max_attempts", 5)
 	viper.SetDefault("email.verify_code.length", 6)
 	viper.SetDefault("order.payment_expire_minutes", 15)
-	viper.SetDefault("order.max_refund_days", 30)
+	viper.SetDefault("order.max_refund_days", 7)
 	viper.SetDefault("captcha.provider", "none")
 	viper.SetDefault("captcha.scenes.login", false)
 	viper.SetDefault("captcha.scenes.register_send_code", false)

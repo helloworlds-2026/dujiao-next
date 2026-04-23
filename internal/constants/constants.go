@@ -69,12 +69,6 @@ const (
 	PaymentRoleMember = "member"
 )
 
-// 支付付款类型常量
-const (
-	PaymentTypeWallet = "wallet"
-	PaymentTypeOrder  = "order"
-)
-
 // 支付交互方式常量
 const (
 	PaymentInteractionQR       = "qr"
@@ -168,6 +162,12 @@ const (
 const (
 	OkpayCallbackSuccess = `{"status":"success"}`
 	OkpayCallbackFail    = `{"status":"fail"}`
+)
+
+// 支付业务类型常量
+const (
+	PaymentTypeOrder  = "order"
+	PaymentTypeWallet = "wallet"
 )
 
 // TokenPay 回调常量
@@ -409,7 +409,8 @@ const (
 	SettingFieldSiteCurrency           = "currency"
 	SettingFieldPaymentExpireMinutes   = "payment_expire_minutes"
 
-	SettingKeyNavConfig = "nav_config"
+	SettingKeyNavConfig    = "nav_config"
+	SettingKeyAccessConfig = "access_config"
 
 	SettingKeyWalletConfig        = "wallet_config"
 	SettingFieldWalletOnlyPayment = "wallet_only_payment"
@@ -426,7 +427,6 @@ const (
 	SettingFieldStripeWebhook      = "stripe_webhook"
 	SettingFieldUpstreamCallback   = "upstream_callback"
 
-	// 默认回调路由路径
 	DefaultPaymentCallbackPath  = "/api/v1/payments/callback"
 	DefaultPaypalWebhookPath    = "/api/v1/payments/webhook/paypal"
 	DefaultStripeWebhookPath    = "/api/v1/payments/webhook/stripe"

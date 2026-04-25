@@ -68,10 +68,7 @@ archives:
     formats: [tar.gz]
     files:
       - ./config.yml.example
-      - src: ./scripts/release-templates/README.md
-        dst: README.md
-      - src: ./scripts/release-templates/docker-compose.yml
-        dst: docker-compose.yml
+      - ./README.md
     name_template: >-
       dujiao-all_
       {{- .Tag }}_

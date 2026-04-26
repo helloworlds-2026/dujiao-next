@@ -264,6 +264,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				authorized.POST("/posts", adminHandler.CreatePost)
 				authorized.PUT("/posts/:id", adminHandler.UpdatePost)
 				authorized.DELETE("/posts/:id", adminHandler.DeletePost)
+				authorized.GET("/posts/:id/products", adminHandler.GetAdminPostProductIDs)
 
 				// Banner 管理
 				authorized.GET("/banners", adminHandler.GetAdminBanners)

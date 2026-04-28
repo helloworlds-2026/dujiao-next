@@ -51,19 +51,35 @@ func (s *AuthService) ValidatePassword(password string) error {
 	return validatePassword(s.cfg.Security.PasswordPolicy, password)
 }
 
+// JWT typ 常量
+const (
+	TokenTypAccess       = "access"
+	TokenTyp2FAChallenge = "2fa_challenge"
+)
+
+// IsAccessTokenTyp 判断 typ 是否为合法访问 token（空字符串兼容旧 token）
+func IsAccessTokenTyp(typ string) bool {
+	return typ == "" || typ == TokenTypAccess
+}
+
 // JWTClaims JWT 声明
 type JWTClaims struct {
 	AdminID      uint   `json:"admin_id"`
 	Username     string `json:"username"`
 	TokenVersion uint64 `json:"token_version"`
+	Typ          string `json:"typ,omitempty"`
 	jwt.RegisteredClaims
 }
 
 // ChallengeClaims 2FA 挑战 token 的 JWT claims
+//
+// 注：Typ 字段同时占用与 JWTClaims 兼容的 typ 键，写入 "2fa_challenge"，
+// 防止挑战 token 在被错误地解析为 JWTClaims 时通过中间件的 typ 校验。
 type ChallengeClaims struct {
 	AdminID uint   `json:"admin_id"`
 	JTI     string `json:"jti"`
 	Purpose string `json:"purpose"`
+	Typ     string `json:"typ"`
 	jwt.RegisteredClaims
 }
 
@@ -92,6 +108,7 @@ func (s *AuthService) GenerateJWT(admin *models.Admin) (string, time.Time, error
 		AdminID:      admin.ID,
 		Username:     admin.Username,
 		TokenVersion: admin.TokenVersion,
+		Typ:          TokenTypAccess,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -182,6 +199,7 @@ func (s *AuthService) IssueChallengeToken(adminID uint) (token, jti string, expi
 		AdminID: adminID,
 		JTI:     jti,
 		Purpose: ChallengePurpose2FA,
+		Typ:     TokenTyp2FAChallenge,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -210,7 +228,7 @@ func (s *AuthService) ParseChallengeToken(tokenString string) (*ChallengeClaims,
 	if !ok || !tok.Valid {
 		return nil, errors.New("invalid challenge token")
 	}
-	if claims.Purpose != ChallengePurpose2FA {
+	if claims.Purpose != ChallengePurpose2FA || claims.Typ != TokenTyp2FAChallenge {
 		return nil, errors.New("invalid challenge purpose")
 	}
 	return claims, nil

@@ -252,6 +252,12 @@ const (
 	LoginLogFailReasonTelegramReplayed     = "telegram_replayed"
 	LoginLogFailReasonTelegramConfig       = "telegram_config_invalid"
 	LoginLogFailReasonInternalError        = "internal_error"
+	LoginLogFailReasonInvalidTOTPCode      = "invalid_totp_code"
+	LoginLogFailReasonInvalidRecoveryCode  = "invalid_recovery_code"
+	LoginLogFailReasonChallengeInvalid     = "challenge_invalid"
+	LoginLogFailReasonTooManyAttempts      = "too_many_attempts"
+	// LoginLogPasswordOK2FAPending 第一步密码通过，等待 TOTP 验证
+	LoginLogPasswordOK2FAPending = "password_ok_2fa_pending"
 )
 
 // 登录日志来源常量

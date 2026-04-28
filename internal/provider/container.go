@@ -64,6 +64,7 @@ type Container struct {
 	AuthzService              *authz.Service
 	AuthService               *service.AuthService
 	TOTPService               *service.TOTPService
+	UserTOTPService           *service.UserTOTPService
 	UserAuthService           *service.UserAuthService
 	TelegramAuthService       *service.TelegramAuthService
 	EmailService              *service.EmailService
@@ -220,6 +221,7 @@ func (c *Container) initServices() {
 	c.CaptchaService = service.NewCaptchaService(c.SettingService, c.Config.Captcha)
 	c.AuthService = service.NewAuthService(c.Config, c.AdminRepo)
 	c.TOTPService = service.NewTOTPService(c.Config, c.AdminRepo, cache.Client())
+	c.UserTOTPService = service.NewUserTOTPService(c.Config, c.UserRepo, cache.Client())
 	c.TelegramAuthService = service.NewTelegramAuthService(c.Config.TelegramAuth)
 	c.UserAuthService = service.NewUserAuthService(c.Config, c.UserRepo, c.UserOAuthIdentityRepo, c.EmailVerifyCodeRepo, c.SettingService, c.EmailService, c.TelegramAuthService)
 	c.UploadService = service.NewUploadService(c.Config)

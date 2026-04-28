@@ -2,9 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -18,7 +15,6 @@ import (
 
 	"github.com/pquerna/otp/totp"
 	"github.com/redis/go-redis/v9"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // TOTP 相关错误
@@ -33,21 +29,14 @@ var (
 )
 
 const (
-	totpIssuerDefault          = "Dujiao-Next-Admin"
-	totpPendingTTL             = 10 * time.Minute
-	totpEnableMaxFailures      = 5
-	totpRecoveryCodeCount      = 10
-	totpRecoveryCodeBcryptCost = 10
-	totpDigits                 = 6
-	totpPeriod                 = 30
-	totpSkew                   = 1
+	totpIssuerDefault     = "Dujiao-Next"
+	totpPendingTTL        = 10 * time.Minute
+	totpEnableMaxFailures = 5
+	totpRecoveryCodeCount = 10
+	totpDigits            = 6
+	totpPeriod            = 30
+	totpSkew              = 1
 )
-
-// recoveryCodeEntry 恢复码持久化结构
-type recoveryCodeEntry struct {
-	Hash   string     `json:"hash"`
-	UsedAt *time.Time `json:"used_at,omitempty"`
-}
 
 // TOTPService TOTP 业务服务
 //
@@ -90,7 +79,7 @@ func (s *TOTPService) GetStatus(adminID uint) (*Status, error) {
 	}
 	st := &Status{Enabled: admin.TOTPEnabledAt != nil, EnabledAt: admin.TOTPEnabledAt}
 	if admin.RecoveryCodes != "" {
-		entries, err := decodeRecoveryCodes(admin.RecoveryCodes)
+		entries, err := decodeRecoveryCodesJSON(admin.RecoveryCodes)
 		if err == nil {
 			st.RecoveryCodesTotal = len(entries)
 			for _, e := range entries {
@@ -339,69 +328,15 @@ func (s *TOTPService) verifyCode(secret, code string) bool {
 }
 
 func (s *TOTPService) generateRecoveryCodes(n int) (plaintext []string, codesJSON string, err error) {
-	plaintext = make([]string, 0, n)
-	entries := make([]recoveryCodeEntry, 0, n)
-	for i := 0; i < n; i++ {
-		raw := make([]byte, 5)
-		if _, err := rand.Read(raw); err != nil {
-			return nil, "", err
-		}
-		hexStr := hex.EncodeToString(raw)
-		formatted := hexStr[:4] + "-" + hexStr[4:]
-		hash, err := bcrypt.GenerateFromPassword([]byte(formatted), totpRecoveryCodeBcryptCost)
-		if err != nil {
-			return nil, "", err
-		}
-		plaintext = append(plaintext, formatted)
-		entries = append(entries, recoveryCodeEntry{Hash: string(hash)})
-	}
-	js, err := json.Marshal(entries)
-	if err != nil {
-		return nil, "", err
-	}
-	return plaintext, string(js), nil
-}
-
-func decodeRecoveryCodes(s string) ([]recoveryCodeEntry, error) {
-	if s == "" {
-		return []recoveryCodeEntry{}, nil
-	}
-	var out []recoveryCodeEntry
-	if err := json.Unmarshal([]byte(s), &out); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return generateRecoveryCodesPair(n)
 }
 
 func (s *TOTPService) consumeRecoveryCode(admin *models.Admin, code string) error {
-	code = strings.TrimSpace(strings.ToLower(code))
-	if code == "" {
-		return ErrTOTPRecoveryInvalid
-	}
-	entries, err := decodeRecoveryCodes(admin.RecoveryCodes)
-	if err != nil {
-		return fmt.Errorf("decode recovery: %w", err)
-	}
-	matched := -1
-	for i, e := range entries {
-		if e.UsedAt != nil {
-			continue
-		}
-		if bcrypt.CompareHashAndPassword([]byte(e.Hash), []byte(code)) == nil {
-			matched = i
-			break
-		}
-	}
-	if matched < 0 {
-		return ErrTOTPRecoveryInvalid
-	}
-	now := s.now()
-	entries[matched].UsedAt = &now
-	js, err := json.Marshal(entries)
+	js, err := matchAndConsumeRecoveryCode(admin.RecoveryCodes, code, s.now())
 	if err != nil {
 		return err
 	}
-	return s.adminRepo.UpdateRecoveryCodes(admin.ID, string(js))
+	return s.adminRepo.UpdateRecoveryCodes(admin.ID, js)
 }
 
 func enableFailKey(adminID uint) string {

@@ -107,12 +107,13 @@ func (s *ProductService) ListPublic(categoryID, search string, page, pageSize in
 	return s.repo.List(filter)
 }
 
-// ListPublicUpdatedAfter 获取指定时间后更新的公开商品列表（供上游同步接口使用）
-func (s *ProductService) ListPublicUpdatedAfter(updatedAfter *time.Time, page, pageSize int) ([]models.Product, int64, error) {
+// ListForUpstreamSync 上游同步专用：可选包含已下架商品，便于下游识别下架状态
+// includeInactive=true 时返回所有未软删商品（含 is_active=false）
+func (s *ProductService) ListForUpstreamSync(updatedAfter *time.Time, includeInactive bool, page, pageSize int) ([]models.Product, int64, error) {
 	filter := repository.ProductListFilter{
 		Page:         page,
 		PageSize:     pageSize,
-		OnlyActive:   true,
+		OnlyActive:   !includeInactive,
 		WithCategory: true,
 		UpdatedAfter: updatedAfter,
 	}

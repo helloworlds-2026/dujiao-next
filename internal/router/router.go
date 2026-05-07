@@ -72,6 +72,10 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 	// 静态文件服务（上传的图片）- 必须放在最前面
 	r.Static("/uploads", "./uploads")
 
+	// SEO 资源（动态生成）
+	r.GET("/sitemap.xml", publicHandler.GetSitemap)
+	r.GET("/robots.txt", publicHandler.GetRobots)
+
 	// API 路由组
 	apiV1 := r.Group("/api/v1")
 	{

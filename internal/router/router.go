@@ -284,6 +284,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				authorized.GET("/categories", adminHandler.GetAdminCategories)
 				authorized.POST("/categories", adminHandler.CreateCategory)
 				authorized.PUT("/categories/:id", adminHandler.UpdateCategory)
+				authorized.PATCH("/categories/:id/active", adminHandler.PatchCategoryActive)
 				authorized.DELETE("/categories/:id", adminHandler.DeleteCategory)
 
 				// 设置管理

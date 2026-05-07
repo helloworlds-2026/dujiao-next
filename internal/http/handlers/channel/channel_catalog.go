@@ -19,7 +19,7 @@ func (h *Handler) GetCategories(c *gin.Context) {
 	locale := c.DefaultQuery("locale", "zh-CN")
 	defaultLocale := "zh-CN"
 
-	categories, err := h.CategoryService.List()
+	categories, err := h.CategoryService.ListActive()
 	if err != nil {
 		logger.Errorw("channel_catalog_list_categories", "error", err)
 		respondChannelError(c, 500, 500, "internal_error", "error.internal_error", err)
@@ -219,7 +219,7 @@ func (h *Handler) GetProductDetail(c *gin.Context) {
 		respondChannelError(c, 500, 500, "internal_error", "error.internal_error", err)
 		return
 	}
-	if product == nil || !product.IsActive {
+	if product == nil || !product.IsActive || !product.Category.IsActive {
 		respondChannelError(c, 404, 404, "product_not_found", "error.product_not_found", nil)
 		return
 	}

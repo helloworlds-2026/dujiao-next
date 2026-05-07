@@ -34,6 +34,7 @@ func BuiltinRoleSeeds() []RoleSeed {
 				{Object: "/admin/products/:id", Action: "*"},
 				{Object: "/admin/categories", Action: "*"},
 				{Object: "/admin/categories/:id", Action: "*"},
+				{Object: "/admin/categories/:id/active", Action: "PATCH"},
 				{Object: "/admin/posts", Action: "*"},
 				{Object: "/admin/posts/:id", Action: "*"},
 				{Object: "/admin/banners", Action: "*"},

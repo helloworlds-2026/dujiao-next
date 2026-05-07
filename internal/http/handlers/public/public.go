@@ -692,7 +692,7 @@ func (h *Handler) GetPostBySlug(c *gin.Context) {
 
 // GetCategories 获取分类列表
 func (h *Handler) GetCategories(c *gin.Context) {
-	categories, err := h.CategoryService.List()
+	categories, err := h.CategoryService.ListActive()
 	if err != nil {
 		shared.RespondError(c, response.CodeInternal, "error.category_fetch_failed", err)
 		return

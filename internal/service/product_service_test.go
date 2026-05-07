@@ -383,8 +383,17 @@ func TestProductServiceCreateRejectsParentCategoryWithChildren(t *testing.T) {
 func TestProductServiceListPublicSortOrderDescending(t *testing.T) {
 	svc, db := newProductServiceForTest(t)
 
+	category := models.Category{
+		Slug:     "sort-test",
+		NameJSON: models.JSON{"zh-CN": "sort-test"},
+		IsActive: true,
+	}
+	if err := db.Create(&category).Error; err != nil {
+		t.Fatalf("create category failed: %v", err)
+	}
+
 	high := models.Product{
-		CategoryID:  1,
+		CategoryID:  category.ID,
 		Slug:        "high-sort-product",
 		TitleJSON:   models.JSON{"zh-CN": "high"},
 		PriceAmount: models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
@@ -392,7 +401,7 @@ func TestProductServiceListPublicSortOrderDescending(t *testing.T) {
 		SortOrder:   100,
 	}
 	low := models.Product{
-		CategoryID:  1,
+		CategoryID:  category.ID,
 		Slug:        "low-sort-product",
 		TitleJSON:   models.JSON{"zh-CN": "low"},
 		PriceAmount: models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
@@ -424,8 +433,17 @@ func TestProductServiceListPublicSortOrderDescending(t *testing.T) {
 func TestProductServiceListPublicSortsSKUsDescending(t *testing.T) {
 	svc, db := newProductServiceForTest(t)
 
+	category := models.Category{
+		Slug:     "sku-sort-test",
+		NameJSON: models.JSON{"zh-CN": "sku-sort-test"},
+		IsActive: true,
+	}
+	if err := db.Create(&category).Error; err != nil {
+		t.Fatalf("create category failed: %v", err)
+	}
+
 	product := models.Product{
-		CategoryID:  1,
+		CategoryID:  category.ID,
 		Slug:        "sku-order-product",
 		TitleJSON:   models.JSON{"zh-CN": "sku-order-product"},
 		PriceAmount: models.NewMoneyFromDecimal(decimal.NewFromInt(10)),

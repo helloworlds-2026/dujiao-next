@@ -853,6 +853,9 @@ func expandPublicCategoryIDs(categoryRepo repository.CategoryRepository, categor
 	if category == nil {
 		return []uint{uint(parsedCategoryID)}, nil
 	}
+	if !category.IsActive {
+		return []uint{}, nil
+	}
 	if category.ParentID > 0 {
 		return []uint{category.ID}, nil
 	}
@@ -864,7 +867,7 @@ func expandPublicCategoryIDs(categoryRepo repository.CategoryRepository, categor
 
 	categoryIDs := []uint{category.ID}
 	for _, item := range categories {
-		if item.ParentID == category.ID {
+		if item.ParentID == category.ID && item.IsActive {
 			categoryIDs = append(categoryIDs, item.ID)
 		}
 	}

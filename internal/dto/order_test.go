@@ -143,15 +143,18 @@ func TestOrderDetailHidesInstructionsBeforePayment(t *testing.T) {
 
 func TestOrderSummaryOmitsSensitiveFields(t *testing.T) {
 	order := &models.Order{
-		ID:            1,
-		OrderNo:       "ORD-002",
-		UserID:        99,
-		ClientIP:      "10.0.0.1",
-		AffiliateCode: "AFF-X",
-		Status:        "pending",
-		Currency:      "USD",
-		TotalAmount:   newMoney("50.00"),
-		CreatedAt:     time.Now(),
+		ID:                      1,
+		OrderNo:                 "ORD-002",
+		UserID:                  99,
+		ClientIP:                "10.0.0.1",
+		AffiliateCode:           "AFF-X",
+		Status:                  "pending",
+		Currency:                "USD",
+		DiscountAmount:          newMoney("5.00"),
+		MemberDiscountAmount:    newMoney("2.00"),
+		PromotionDiscountAmount: newMoney("3.00"),
+		TotalAmount:             newMoney("50.00"),
+		CreatedAt:               time.Now(),
 	}
 
 	summary := NewOrderSummary(order)
@@ -166,6 +169,15 @@ func TestOrderSummaryOmitsSensitiveFields(t *testing.T) {
 	}
 	if summary.OrderNo != "ORD-002" {
 		t.Errorf("expected order_no=ORD-002, got %s", summary.OrderNo)
+	}
+	if summary.DiscountAmount.String() != "5.00" {
+		t.Errorf("expected discount_amount=5.00, got %s", summary.DiscountAmount.String())
+	}
+	if summary.MemberDiscountAmount.String() != "2.00" {
+		t.Errorf("expected member_discount_amount=2.00, got %s", summary.MemberDiscountAmount.String())
+	}
+	if summary.PromotionDiscountAmount.String() != "3.00" {
+		t.Errorf("expected promotion_discount_amount=3.00, got %s", summary.PromotionDiscountAmount.String())
 	}
 }
 

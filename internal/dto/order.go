@@ -151,7 +151,9 @@ type OrderItemResp struct {
 	SKUSnapshot              models.JSON        `json:"sku_snapshot"`
 	Tags                     models.StringArray `json:"tags"`
 	Quantity                 int                `json:"quantity"`
+	OriginalUnitPrice        models.Money       `json:"original_unit_price"`
 	UnitPrice                models.Money       `json:"unit_price"`
+	OriginalTotalPrice       models.Money       `json:"original_total_price"`
 	TotalPrice               models.Money       `json:"total_price"`
 	CouponDiscountAmount     models.Money       `json:"coupon_discount_amount"`
 	MemberDiscountAmount     models.Money       `json:"member_discount_amount"`
@@ -175,7 +177,9 @@ func newOrderItemResp(item *models.OrderItem) OrderItemResp {
 		SKUSnapshot:              item.SKUSnapshotJSON,
 		Tags:                     item.Tags,
 		Quantity:                 item.Quantity,
+		OriginalUnitPrice:        item.OriginalUnitPrice,
 		UnitPrice:                item.UnitPrice,
+		OriginalTotalPrice:       item.OriginalTotalPrice,
 		TotalPrice:               item.TotalPrice,
 		CouponDiscountAmount:     item.CouponDiscount,
 		MemberDiscountAmount:     item.MemberDiscount,

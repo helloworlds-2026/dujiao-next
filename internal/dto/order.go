@@ -9,23 +9,29 @@ import (
 
 // OrderSummary 订单列表响应（精简字段）
 type OrderSummary struct {
-	OrderNo     string          `json:"order_no"`
-	Status      string          `json:"status"`
-	Currency    string          `json:"currency"`
-	TotalAmount models.Money    `json:"total_amount"`
-	CreatedAt   time.Time       `json:"created_at"`
-	Items       []OrderItemResp `json:"items,omitempty"`
-	Children    []OrderSummary  `json:"children,omitempty"`
+	OrderNo                 string          `json:"order_no"`
+	Status                  string          `json:"status"`
+	Currency                string          `json:"currency"`
+	DiscountAmount          models.Money    `json:"discount_amount"`
+	MemberDiscountAmount    models.Money    `json:"member_discount_amount"`
+	PromotionDiscountAmount models.Money    `json:"promotion_discount_amount"`
+	TotalAmount             models.Money    `json:"total_amount"`
+	CreatedAt               time.Time       `json:"created_at"`
+	Items                   []OrderItemResp `json:"items,omitempty"`
+	Children                []OrderSummary  `json:"children,omitempty"`
 }
 
 // NewOrderSummary 从 models.Order 构造 OrderSummary
 func NewOrderSummary(o *models.Order) OrderSummary {
 	s := OrderSummary{
-		OrderNo:     o.OrderNo,
-		Status:      o.Status,
-		Currency:    o.Currency,
-		TotalAmount: o.TotalAmount,
-		CreatedAt:   o.CreatedAt,
+		OrderNo:                 o.OrderNo,
+		Status:                  o.Status,
+		Currency:                o.Currency,
+		DiscountAmount:          o.DiscountAmount,
+		MemberDiscountAmount:    o.MemberDiscountAmount,
+		PromotionDiscountAmount: o.PromotionDiscountAmount,
+		TotalAmount:             o.TotalAmount,
+		CreatedAt:               o.CreatedAt,
 	}
 	for _, item := range o.Items {
 		resp := newOrderItemResp(&item)

@@ -43,6 +43,7 @@ const (
 	PaymentProviderOfficial = "official"
 	PaymentProviderEpay     = "epay"
 	PaymentProviderEpusdt   = "epusdt"
+	PaymentProviderBepusdt  = "bepusdt"
 	PaymentProviderOkpay    = "okpay"
 	PaymentProviderTokenpay = "tokenpay"
 	PaymentProviderWallet   = "wallet"
@@ -158,9 +159,15 @@ const (
 	AlipayCallbackFail            = "fail"
 )
 
-// EPUSDT 回调常量
+// BEpusdt 回调常量
 const (
-	EpusdtCallbackSuccess = "success"
+	BepusdtCallbackSuccess = "success"
+	BepusdtCallbackFail    = "fail"
+)
+
+// epusdt（GMPay）回调常量
+const (
+	EpusdtCallbackSuccess = "ok"
 	EpusdtCallbackFail    = "fail"
 )
 

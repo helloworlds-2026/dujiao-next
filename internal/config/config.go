@@ -29,11 +29,13 @@ type Config struct {
 	Email        EmailConfig        `mapstructure:"email"`
 	Order        OrderConfig        `mapstructure:"order"`
 	Captcha      CaptchaConfig      `mapstructure:"captcha"`
+	Web          WebConfig          `mapstructure:"web"`
 }
 
 // AppConfig 应用级配置
 type AppConfig struct {
-	SecretKey string `mapstructure:"secret_key"` // 通用加密密钥（AES-256，用于加密存储敏感信息）
+	SecretKey  string `mapstructure:"secret_key"`  // 通用加密密钥（AES-256，用于加密存储敏感信息）
+	TOTPIssuer string `mapstructure:"totp_issuer"` // 2FA 验证器中显示的发行方名称（避免使用 & 等特殊字符，Google Authenticator 解析容错差）
 }
 
 // ServerConfig 服务器配置
@@ -260,6 +262,14 @@ type PasswordPolicyConfig struct {
 	RequireSpecial bool `mapstructure:"require_special"`
 }
 
+// WebConfig 仅在 fullstack 二进制模式下生效。
+// 默认构建模式（无 -tags fullstack）下这些字段不被任何代码读取。
+type WebConfig struct {
+	// AdminPath 后台访问路径前缀，例如 "/admin" 或 "/dj-mgmt-7x9k2"。
+	// 校验规则见 internal/web.ValidateAdminPath。
+	AdminPath string `mapstructure:"admin_path"`
+}
+
 // Load 从 config.yml 加载配置
 func Load() *Config {
 	viper.SetConfigName("config")
@@ -271,6 +281,7 @@ func Load() *Config {
 
 	// 设置默认值（可选）
 	viper.SetDefault("app.secret_key", "change-me-32-byte-secret-key!!")
+	viper.SetDefault("app.totp_issuer", "Dujiao-Next")
 	viper.SetDefault("server.host", "0.0.0.0")
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.mode", "debug")
@@ -377,6 +388,7 @@ func Load() *Config {
 	viper.SetDefault("captcha.turnstile.secret_key", "")
 	viper.SetDefault("captcha.turnstile.verify_url", "https://challenges.cloudflare.com/turnstile/v0/siteverify")
 	viper.SetDefault("captcha.turnstile.timeout_ms", 2000)
+	viper.SetDefault("web.admin_path", "/admin")
 
 	// 环境变量支持
 	viper.AutomaticEnv()                                   // 自动读取环境变量

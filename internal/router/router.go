@@ -17,6 +17,7 @@ import (
 	"github.com/dujiao-next/internal/http/response"
 	"github.com/dujiao-next/internal/logger"
 	"github.com/dujiao-next/internal/provider"
+	"github.com/dujiao-next/internal/web"
 
 	"github.com/gin-gonic/gin"
 )
@@ -71,6 +72,10 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 	// 静态文件服务（上传的图片）- 必须放在最前面
 	r.Static("/uploads", "./uploads")
 
+	// SEO 资源（动态生成）
+	r.GET("/sitemap.xml", publicHandler.GetSitemap)
+	r.GET("/robots.txt", publicHandler.GetRobots)
+
 	// API 路由组
 	apiV1 := r.Group("/api/v1")
 	{
@@ -110,6 +115,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 			auth.POST("/send-verify-code", publicHandler.SendUserVerifyCode)
 			auth.POST("/register", publicHandler.UserRegister)
 			auth.POST("/login", RateLimitMiddleware(redisClient, loginRule, KeyByIPAndJSONField("email")), publicHandler.UserLogin)
+			auth.POST("/login/verify-2fa", RateLimitMiddleware(redisClient, loginRule, KeyByIP), publicHandler.VerifyUser2FA)
 			auth.POST("/telegram/login", RateLimitMiddleware(redisClient, loginRule, KeyByIP), publicHandler.UserTelegramLogin)
 			auth.POST("/telegram/miniapp/login", RateLimitMiddleware(redisClient, loginRule, KeyByIP), publicHandler.UserTelegramMiniAppLogin)
 			auth.POST("/forgot-password", publicHandler.UserForgotPassword)
@@ -129,6 +135,11 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 			user.DELETE("/me/telegram/unbind", publicHandler.UnbindMyTelegram)
 			user.POST("/me/email/send-verify-code", publicHandler.SendChangeEmailCode)
 			user.POST("/me/email/change", publicHandler.ChangeEmail)
+			user.GET("/me/2fa/status", publicHandler.GetUser2FAStatus)
+			user.POST("/me/2fa/setup", publicHandler.SetupUser2FA)
+			user.POST("/me/2fa/enable", publicHandler.EnableUser2FA)
+			user.POST("/me/2fa/disable", publicHandler.DisableUser2FA)
+			user.POST("/me/2fa/recovery-codes/regenerate", publicHandler.RegenerateUser2FARecoveryCodes)
 			user.GET("/cart", publicHandler.GetCart)
 			user.POST("/cart/items", publicHandler.UpsertCartItem)
 			user.DELETE("/cart/items/:product_id", publicHandler.DeleteCartItem)
@@ -235,6 +246,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 		{
 			// 登录接口（无需鉴权）
 			admin.POST("/login", RateLimitMiddleware(redisClient, adminLoginRule, KeyByIP), adminHandler.AdminLogin)
+			admin.POST("/login/verify-2fa", RateLimitMiddleware(redisClient, adminLoginRule, KeyByIP), adminHandler.Verify2FA)
 
 			// 需要鉴权的接口
 			authorized := admin.Use(JWTAuthMiddleware(cfg.JWT.SecretKey, c.AdminRepo), AdminRBACMiddleware(c.AuthzService))
@@ -265,6 +277,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				authorized.POST("/posts", adminHandler.CreatePost)
 				authorized.PUT("/posts/:id", adminHandler.UpdatePost)
 				authorized.DELETE("/posts/:id", adminHandler.DeletePost)
+				authorized.GET("/posts/:id/products", adminHandler.GetAdminPostProductIDs)
 
 				// Banner 管理
 				authorized.GET("/banners", adminHandler.GetAdminBanners)
@@ -277,6 +290,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				authorized.GET("/categories", adminHandler.GetAdminCategories)
 				authorized.POST("/categories", adminHandler.CreateCategory)
 				authorized.PUT("/categories/:id", adminHandler.UpdateCategory)
+				authorized.PATCH("/categories/:id/active", adminHandler.PatchCategoryActive)
 				authorized.DELETE("/categories/:id", adminHandler.DeleteCategory)
 
 				// 设置管理
@@ -304,6 +318,15 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				authorized.PUT("/settings/affiliate", adminHandler.UpdateAffiliateSettings)
 				authorized.PUT("/password", adminHandler.UpdateAdminPassword) // 修改密码
 
+				// 系统信息与版本检测
+				authorized.GET("/system/version/check", adminHandler.CheckSystemUpdate)
+
+				authorized.GET("/2fa/status", adminHandler.Get2FAStatus)
+				authorized.POST("/2fa/setup", adminHandler.Setup2FA)
+				authorized.POST("/2fa/enable", adminHandler.Enable2FA)
+				authorized.POST("/2fa/disable", adminHandler.Disable2FA)
+				authorized.POST("/2fa/recovery-codes/regenerate", adminHandler.RegenerateRecoveryCodes)
+
 				// 推广返利
 				authorized.GET("/affiliates/users", adminHandler.ListAffiliateUsers)
 				authorized.PATCH("/affiliates/users/:id/status", adminHandler.UpdateAffiliateUserStatus)
@@ -320,6 +343,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				authorized.GET("/authz/audit-logs", adminHandler.ListAuthzAuditLogs)
 				authorized.POST("/authz/admins", adminHandler.CreateAuthzAdmin)
 				authorized.PUT("/authz/admins/:id", adminHandler.UpdateAuthzAdmin)
+				authorized.POST("/authz/admins/:id/2fa/reset", adminHandler.ResetTargetAdmin2FA)
 				authorized.DELETE("/authz/admins/:id", adminHandler.DeleteAuthzAdmin)
 				authorized.GET("/authz/permissions/catalog", func(ctx *gin.Context) {
 					response.Success(ctx, buildAdminPermissionCatalog(r))
@@ -408,6 +432,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				authorized.GET("/users/:id/wallet/transactions", adminHandler.GetAdminUserWalletTransactions)
 				authorized.POST("/users/:id/wallet/adjust", adminHandler.AdjustAdminUserWallet)
 				authorized.PUT("/users/:id/member-level", adminHandler.SetUserMemberLevel)
+				authorized.DELETE("/users/:id/2fa", adminHandler.ResetUser2FA)
 				authorized.GET("/wallet/recharges", adminHandler.GetAdminWalletRecharges)
 
 				// API 凭证审核管理
@@ -445,6 +470,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 
 				// 采购单管理
 				authorized.GET("/procurement-orders", adminHandler.GetProcurementOrders)
+				authorized.GET("/procurement-orders/stats", adminHandler.GetProcurementOrderStats)
 				authorized.GET("/procurement-orders/:id", adminHandler.GetProcurementOrder)
 				authorized.GET("/procurement-orders/:id/upstream-payload/download", adminHandler.DownloadProcurementUpstreamPayload)
 				authorized.POST("/procurement-orders/:id/retry", adminHandler.RetryProcurementOrder)
@@ -484,6 +510,19 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	// 嵌入式前端资源（仅在 -tags fullstack 构建时生效）
+	if web.Enabled() {
+		if err := web.ValidateAdminPath(cfg.Web.AdminPath); err != nil {
+			log.Sugar().Fatalf("web.admin_path 配置错误: %v", err)
+		}
+		if err := web.RegisterAdmin(r, cfg.Web.AdminPath, web.AdminFS()); err != nil {
+			log.Sugar().Fatalf("注册 admin SPA 失败: %v", err)
+		}
+		if err := web.RegisterUser(r, web.UserFS()); err != nil {
+			log.Sugar().Fatalf("注册 user SPA 失败: %v", err)
+		}
+	}
+
 	return r
 }
 
@@ -512,6 +551,9 @@ func buildAdminPermissionCatalog(engine *gin.Engine) []adminPermissionCatalogIte
 			continue
 		}
 		if item.Path == "/api/v1/admin/login" {
+			continue
+		}
+		if item.Path == "/api/v1/admin/login/verify-2fa" {
 			continue
 		}
 		object := authz.NormalizeObject(item.Path)

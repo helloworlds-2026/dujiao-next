@@ -584,13 +584,15 @@ func (h *Handler) GetOrder(c *gin.Context) {
 		items := make([]gin.H, 0, len(order.Items))
 		for _, item := range order.Items {
 			items = append(items, gin.H{
-				"product_id":       item.ProductID,
-				"sku_id":           item.SKUID,
-				"title":            item.TitleJSON,
-				"quantity":         item.Quantity,
-				"unit_price":       item.UnitPrice.StringFixed(2),
-				"total_price":      item.TotalPrice.StringFixed(2),
-				"fulfillment_type": item.FulfillmentType,
+				"product_id":           item.ProductID,
+				"sku_id":               item.SKUID,
+				"title":                item.TitleJSON,
+				"quantity":             item.Quantity,
+				"original_unit_price":  item.OriginalUnitPrice.StringFixed(2),
+				"unit_price":           item.UnitPrice.StringFixed(2),
+				"original_total_price": item.OriginalTotalPrice.StringFixed(2),
+				"total_price":          item.TotalPrice.StringFixed(2),
+				"fulfillment_type":     item.FulfillmentType,
 			})
 		}
 		resp["items"] = items

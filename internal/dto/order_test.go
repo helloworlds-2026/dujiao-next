@@ -35,16 +35,18 @@ func TestOrderDetailOmitsSensitiveFields(t *testing.T) {
 		UpdatedAt:          now,
 		Items: []models.OrderItem{
 			{
-				ID:              1,
-				OrderID:         1,
-				ProductID:       5,
-				SKUID:           10,
-				TitleJSON:       models.JSON{"zh-CN": "商品A"},
-				CostPrice:       newMoney("50.00"),
-				UnitPrice:       newMoney("100.00"),
-				TotalPrice:      newMoney("100.00"),
-				Quantity:        1,
-				FulfillmentType: "upstream",
+				ID:                 1,
+				OrderID:            1,
+				ProductID:          5,
+				SKUID:              10,
+				TitleJSON:          models.JSON{"zh-CN": "商品A"},
+				CostPrice:          newMoney("50.00"),
+				OriginalUnitPrice:  newMoney("120.00"),
+				UnitPrice:          newMoney("100.00"),
+				OriginalTotalPrice: newMoney("120.00"),
+				TotalPrice:         newMoney("100.00"),
+				Quantity:           1,
+				FulfillmentType:    "upstream",
 			},
 		},
 		Fulfillment: &models.Fulfillment{
@@ -78,7 +80,8 @@ func TestOrderDetailOmitsSensitiveFields(t *testing.T) {
 	// 公开字段应存在
 	publicFields := []string{
 		"order_no", "total_amount", "status", "currency",
-		"guest_email", "unit_price", "fulfillment_type",
+		"guest_email", "original_unit_price", "unit_price",
+		"original_total_price", "fulfillment_type",
 	}
 	for _, field := range publicFields {
 		if !strings.Contains(jsonStr, `"`+field+`"`) {

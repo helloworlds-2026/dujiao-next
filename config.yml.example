@@ -2,6 +2,7 @@
 
 app:
   secret_key: your-secret-key-change-in-production-please # 务必修改，用于 AES-256 加密敏感数据
+  totp_issuer: Dujiao-Next                          # 后台 2FA 验证器中显示的发行方名称（避免 & 等特殊字符）
 
 server:
   host: 0.0.0.0
@@ -136,3 +137,10 @@ email:
 order:
   payment_expire_minutes: 15
   max_refund_days: 30
+
+# Web 路由配置（仅在 fullstack 二进制模式下生效；普通 Docker 镜像部署忽略此段）
+web:
+  # 后台访问路径前缀
+  # 强烈建议改成不易猜测的字符串以降低自动化扫描风险
+  # 例如: "/dj-mgmt-7x9k2" 或 "/console-private"
+  admin_path: "/admin"

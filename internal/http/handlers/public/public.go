@@ -72,6 +72,7 @@ func (v *publicProductView) toProductResp() dto.ProductResp {
 		ID:                   v.Product.ID,
 		CategoryID:           v.Product.CategoryID,
 		Slug:                 v.Product.Slug,
+		SeoMeta:              v.Product.SeoMetaJSON,
 		Title:                v.Product.TitleJSON,
 		Description:          v.Product.DescriptionJSON,
 		Content:              v.Product.ContentJSON,
@@ -79,6 +80,7 @@ func (v *publicProductView) toProductResp() dto.ProductResp {
 		Images:               v.Product.Images,
 		Tags:                 v.Product.Tags,
 		PurchaseType:         v.Product.PurchaseType,
+		MinPurchaseQuantity:  v.Product.MinPurchaseQuantity,
 		MaxPurchaseQuantity:  v.Product.MaxPurchaseQuantity,
 		FulfillmentType:      v.Product.FulfillmentType,
 		ManualFormSchema:     v.Product.ManualFormSchemaJSON,
@@ -374,8 +376,14 @@ func (h *Handler) GetProductBySlug(c *gin.Context) {
 		return
 	}
 
+	if posts, perr := h.PostService.ListPostsForProduct(product.ID, publicRelatedPostsLimit); perr == nil {
+		decorated.RelatedPosts = dto.NewRelatedPostCardList(posts)
+	}
+
 	response.Success(c, decorated)
 }
+
+const publicRelatedPostsLimit = 6
 
 func (h *Handler) decoratePublicProduct(product *models.Product, promotionService *service.PromotionService, userMemberLevelID ...uint) (dto.ProductResp, error) {
 	if product == nil {
@@ -721,8 +729,9 @@ func (h *Handler) GetPosts(c *gin.Context) {
 
 	// 获取类型参数
 	postType := c.Query("type") // blog 或 notice
+	search := c.Query("search")
 
-	posts, total, err := h.PostService.ListPublic(postType, page, pageSize)
+	posts, total, err := h.PostService.ListPublic(postType, search, page, pageSize)
 	if err != nil {
 		shared.RespondError(c, response.CodeInternal, "error.post_fetch_failed", err)
 		return
@@ -747,12 +756,19 @@ func (h *Handler) GetPostBySlug(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, dto.NewPostResp(post))
+	resp := dto.NewPostResp(post)
+	if post.Type == constants.PostTypeBlog {
+		products, perr := h.PostService.ListRelatedProducts(post.ID)
+		if perr == nil {
+			resp.RelatedProducts = dto.NewRelatedProductCardList(products)
+		}
+	}
+	response.Success(c, resp)
 }
 
 // GetCategories 获取分类列表
 func (h *Handler) GetCategories(c *gin.Context) {
-	categories, err := h.CategoryService.List()
+	categories, err := h.CategoryService.ListActive()
 	if err != nil {
 		shared.RespondError(c, response.CodeInternal, "error.category_fetch_failed", err)
 		return

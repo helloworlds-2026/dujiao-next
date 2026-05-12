@@ -9,6 +9,7 @@ type ProductResp struct {
 	ID                   uint               `json:"id"`
 	CategoryID           uint               `json:"category_id"`
 	Slug                 string             `json:"slug"`
+	SeoMeta              models.JSON        `json:"seo_meta"`
 	Title                models.JSON        `json:"title"`
 	Description          models.JSON        `json:"description"`
 	Content              models.JSON        `json:"content"`
@@ -16,6 +17,7 @@ type ProductResp struct {
 	Images               models.StringArray `json:"images"`
 	Tags                 models.StringArray `json:"tags"`
 	PurchaseType         string             `json:"purchase_type"`
+	MinPurchaseQuantity  int                `json:"min_purchase_quantity"`
 	MaxPurchaseQuantity  int                `json:"max_purchase_quantity"`
 	FulfillmentType      string             `json:"fulfillment_type"`
 	ManualFormSchema     models.JSON        `json:"manual_form_schema"`
@@ -38,6 +40,9 @@ type ProductResp struct {
 	PromotionPriceAmount *models.Money       `json:"promotion_price_amount,omitempty"`
 	PromotionRules       []PromotionRuleResp `json:"promotion_rules,omitempty"`
 	MemberPrices         []MemberLevelPrice  `json:"member_prices,omitempty"`
+
+	// 关联文章（仅商品详情接口填充，列表接口不返回）
+	RelatedPosts []RelatedPostCard `json:"related_posts,omitempty"`
 }
 
 // SKUResp 商品 SKU 公共响应

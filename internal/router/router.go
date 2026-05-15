@@ -63,8 +63,12 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 	}
 
 	// 中间件
-	r.Use(gin.Recovery())
+	// RequestIDMiddleware 必须前置于 RecoveryMiddleware:
+	// 它本身不会 panic(仅做 uuid 生成 + c.Set + Header.Set),先注入 request_id 才能
+	// 保证 RecoveryMiddleware 在 panic 时拿到的 request_id 一定不为空——既用于日志关联,
+	// 也用于 response body 的 request_id 字段。
 	r.Use(RequestIDMiddleware())
+	r.Use(RecoveryMiddleware())
 	r.Use(LoggerMiddleware(log))
 	r.Use(CORSMiddleware(cfg.CORS))
 	r.Use(CallbackRouteMiddleware(c.SettingService, publicHandler, upstreamHandler))

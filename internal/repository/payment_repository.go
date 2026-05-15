@@ -9,6 +9,7 @@ import (
 	"github.com/dujiao-next/internal/models"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // PaymentRepository 支付数据访问接口
@@ -23,6 +24,7 @@ type PaymentRepository interface {
 	GetLatestPendingByOrder(orderID uint, now time.Time) (*models.Payment, error)
 	ListAdmin(filter PaymentListFilter) ([]models.Payment, int64, error)
 	Transaction(fn func(tx *gorm.DB) error) error
+	GetByIDForUpdate(id uint) (*models.Payment, error)
 	WithTx(tx *gorm.DB) *GormPaymentRepository
 }
 
@@ -227,4 +229,19 @@ func (r *GormPaymentRepository) ListAdmin(filter PaymentListFilter) ([]models.Pa
 		return nil, 0, err
 	}
 	return payments, total, nil
+}
+
+// GetByIDForUpdate 事务中加行锁读取支付单,不存在返回 (nil, nil)。
+func (r *GormPaymentRepository) GetByIDForUpdate(id uint) (*models.Payment, error) {
+	if id == 0 {
+		return nil, nil
+	}
+	var payment models.Payment
+	if err := r.db.Clauses(clause.Locking{Strength: "UPDATE"}).First(&payment, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &payment, nil
 }

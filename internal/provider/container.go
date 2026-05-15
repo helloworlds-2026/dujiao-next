@@ -232,7 +232,7 @@ func (c *Container) initServices() {
 	c.CategoryService = service.NewCategoryService(c.CategoryRepo)
 	c.SitemapService = service.NewSitemapService(c.ProductRepo, c.CategoryRepo, c.PostRepo)
 	c.CartService = service.NewCartService(c.CartRepo, c.ProductRepo, c.ProductSKURepo, c.PromotionRepo, c.SettingService)
-	c.WalletService = service.NewWalletService(c.WalletRepo, c.OrderRepo, c.UserRepo, c.AffiliateService, c.SettingService)
+	c.WalletService = service.NewWalletService(c.WalletRepo, c.OrderRepo, c.OrderRefundRecordRepo, c.UserRepo, c.AffiliateService, c.SettingService)
 	c.OrderRefundService = service.NewOrderRefundService(c.OrderRepo, c.UserRepo, c.OrderRefundRecordRepo, c.AffiliateService, c.SettingService)
 	c.MemberLevelService = service.NewMemberLevelService(c.MemberLevelRepo, c.MemberLevelPriceRepo, c.UserRepo)
 	c.OrderRiskControlService = service.NewOrderRiskControlService(c.SettingService, c.OrderRepo)
@@ -293,7 +293,7 @@ func (c *Container) initServices() {
 		NotificationService:   c.NotificationService,
 	})
 	c.ProcurementOrderService = service.NewProcurementOrderService(
-		c.ProcurementOrderRepo, c.OrderRepo, c.ProductMappingRepo, c.SKUMappingRepo,
+		c.ProcurementOrderRepo, c.OrderRepo, c.FulfillmentRepo, c.ProductMappingRepo, c.SKUMappingRepo,
 		c.SiteConnectionService, c.QueueClient, c.SettingService, c.Config.Email, c.FulfillmentService,
 	)
 	c.ReconciliationService = service.NewReconciliationService(

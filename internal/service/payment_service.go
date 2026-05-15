@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 
@@ -17,7 +16,6 @@ import (
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // PaymentService 支付服务
@@ -221,17 +219,14 @@ func (s *PaymentService) CreatePayment(input CreatePaymentInput) (*CreatePayment
 	}
 
 	err := s.paymentRepo.Transaction(func(tx *gorm.DB) error {
-		var lockedOrder models.Order
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Preload("Items").
-			Preload("Children").
-			Preload("Children.Items").
-			First(&lockedOrder, input.OrderID).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrOrderNotFound
-			}
+		preloaded, err := s.orderRepo.WithTx(tx).GetByIDForUpdateWithChildren(input.OrderID)
+		if err != nil {
 			return ErrOrderFetchFailed
 		}
+		if preloaded == nil {
+			return ErrOrderNotFound
+		}
+		lockedOrder := *preloaded
 		if lockedOrder.ParentID != nil {
 			return ErrPaymentInvalid
 		}
@@ -373,10 +368,10 @@ func (s *PaymentService) CreatePayment(input CreatePaymentInput) (*CreatePayment
 		if err := paymentRepo.Create(payment); err != nil {
 			return ErrPaymentCreateFailed
 		}
-		if err := tx.Model(&models.Order{}).Where("id = ?", lockedOrder.ID).Updates(map[string]interface{}{
+		if err := s.orderRepo.WithTx(tx).UpdateFields(lockedOrder.ID, map[string]interface{}{
 			"online_paid_amount": models.NewMoneyFromDecimal(onlineAmount),
 			"updated_at":         time.Now(),
-		}).Error; err != nil {
+		}); err != nil {
 			return ErrOrderUpdateFailed
 		}
 		lockedOrder.OnlinePaidAmount = models.NewMoneyFromDecimal(onlineAmount)
@@ -442,10 +437,14 @@ func (s *PaymentService) CreatePayment(input CreatePaymentInput) (*CreatePayment
 			if s.walletSvc == nil {
 				return nil
 			}
-			var lockedOrder models.Order
-			if findErr := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&lockedOrder, order.ID).Error; findErr != nil {
+			preloaded, findErr := s.orderRepo.WithTx(tx).GetByIDForUpdate(order.ID)
+			if findErr != nil {
 				return findErr
 			}
+			if preloaded == nil {
+				return ErrOrderNotFound
+			}
+			lockedOrder := *preloaded
 			_, refundErr := s.walletSvc.ReleaseOrderBalance(tx, &lockedOrder, constants.WalletTxnTypeOrderRefund, "在线支付创建失败，退回余额")
 			return refundErr
 		})

@@ -7,12 +7,7 @@ import (
 
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/models"
-	"github.com/dujiao-next/internal/payment/paypal"
 	"github.com/dujiao-next/internal/payment/provider"
-	"github.com/dujiao-next/internal/payment/stripe"
-	"github.com/dujiao-next/internal/payment/wechatpay"
-
-	"github.com/shopspring/decimal"
 )
 
 // HandleSyncCallback 处理同步 form callback（alipay/epay/epusdt/bepusdt/tokenpay/okpay）。
@@ -233,42 +228,6 @@ func (s *PaymentService) findWebhookPayment(channelID uint, result *provider.Web
 	return nil, ErrPaymentNotFound
 }
 
-func buildPaypalCallbackAmount(event *paypal.WebhookEvent, status string) (models.Money, string, error) {
-	amount := models.Money{}
-	if event == nil {
-		return amount, "", ErrPaymentGatewayResponseInvalid
-	}
-
-	amountValue, amountCurrency := event.CaptureAmount()
-	amountValue = strings.TrimSpace(amountValue)
-	amountCurrency = strings.ToUpper(strings.TrimSpace(amountCurrency))
-
-	requiresAmount := strings.EqualFold(strings.TrimSpace(status), constants.PaymentStatusSuccess)
-	if requiresAmount {
-		if amountValue == "" || amountCurrency == "" {
-			return amount, "", ErrPaymentGatewayResponseInvalid
-		}
-	}
-
-	if amountValue == "" {
-		if amountCurrency != "" {
-			return amount, "", ErrPaymentGatewayResponseInvalid
-		}
-		return amount, "", nil
-	}
-
-	parsedAmount, err := decimal.NewFromString(amountValue)
-	if err != nil || parsedAmount.Cmp(decimal.Zero) <= 0 {
-		return amount, "", ErrPaymentGatewayResponseInvalid
-	}
-	if amountCurrency == "" {
-		return amount, "", ErrPaymentGatewayResponseInvalid
-	}
-
-	amount = models.NewMoneyFromDecimal(parsedAmount)
-	return amount, amountCurrency, nil
-}
-
 // HandleWechatWebhook 处理微信支付回调。
 // P1.2c Task 6: 退化为 thin wrapper，通过 handleWebhookViaRegistry 路由解析。
 func (s *PaymentService) HandleWechatWebhook(input WebhookCallbackInput) (*models.Payment, string, error) {
@@ -289,28 +248,4 @@ func (s *PaymentService) HandleStripeWebhook(input WebhookCallbackInput) (*model
 	)
 }
 
-func mapWechatGatewayError(err error) error {
-	switch {
-	case errors.Is(err, wechatpay.ErrConfigInvalid):
-		return ErrPaymentChannelConfigInvalid
-	case errors.Is(err, wechatpay.ErrRequestFailed):
-		return ErrPaymentGatewayRequestFailed
-	case errors.Is(err, wechatpay.ErrSignatureInvalid), errors.Is(err, wechatpay.ErrResponseInvalid):
-		return ErrPaymentGatewayResponseInvalid
-	default:
-		return ErrPaymentGatewayRequestFailed
-	}
-}
 
-func mapStripeGatewayError(err error) error {
-	switch {
-	case errors.Is(err, stripe.ErrConfigInvalid):
-		return ErrPaymentChannelConfigInvalid
-	case errors.Is(err, stripe.ErrRequestFailed):
-		return ErrPaymentGatewayRequestFailed
-	case errors.Is(err, stripe.ErrSignatureInvalid), errors.Is(err, stripe.ErrResponseInvalid):
-		return ErrPaymentGatewayResponseInvalid
-	default:
-		return ErrPaymentGatewayRequestFailed
-	}
-}

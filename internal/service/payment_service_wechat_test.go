@@ -10,7 +10,6 @@ import (
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/models"
 	"github.com/dujiao-next/internal/payment/provider"
-	"github.com/dujiao-next/internal/payment/wechatpay"
 
 	"github.com/shopspring/decimal"
 )
@@ -86,21 +85,6 @@ func buildWechatTestPrivateKey() string {
 		panic(err)
 	}
 	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyDER}))
-}
-
-func TestMapWechatGatewayError(t *testing.T) {
-	if got := mapWechatGatewayError(wechatpay.ErrConfigInvalid); got != ErrPaymentChannelConfigInvalid {
-		t.Fatalf("expected config invalid mapping, got: %v", got)
-	}
-	if got := mapWechatGatewayError(wechatpay.ErrRequestFailed); got != ErrPaymentGatewayRequestFailed {
-		t.Fatalf("expected request failed mapping, got: %v", got)
-	}
-	if got := mapWechatGatewayError(wechatpay.ErrSignatureInvalid); got != ErrPaymentGatewayResponseInvalid {
-		t.Fatalf("expected signature invalid mapping, got: %v", got)
-	}
-	if got := mapWechatGatewayError(wechatpay.ErrResponseInvalid); got != ErrPaymentGatewayResponseInvalid {
-		t.Fatalf("expected response invalid mapping, got: %v", got)
-	}
 }
 
 func TestShouldUseCNYPaymentCurrency(t *testing.T) {

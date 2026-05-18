@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/models"
 	"github.com/dujiao-next/internal/service"
 	"github.com/gin-gonic/gin"
@@ -238,5 +239,39 @@ func TestCreateOrderRequestBindsAffiliateFields(t *testing.T) {
 	}
 	if req.AffiliateKey != "visitor-556677" {
 		t.Fatalf("expected affiliate visitor key to bind, got=%s", req.AffiliateKey)
+	}
+}
+
+func TestBuildChannelPaymentResponse_USDTQRExposesWalletFields(t *testing.T) {
+	payment := &models.Payment{
+		ID:              42,
+		OrderID:         1,
+		ChannelID:       2,
+		ProviderType:    constants.PaymentProviderBepusdt,
+		ChannelType:     "usdt-trc20",
+		InteractionMode: constants.PaymentInteractionQR,
+		Status:          constants.PaymentStatusPending,
+		Amount:          models.NewMoneyFromDecimal(decimal.RequireFromString("100.00")),
+		FeeRate:         models.Money{},
+		FeeAmount:       models.Money{},
+		Currency:        "CNY",
+		PayURL:          "https://pay.example.com/c/abc",
+		QRCode:          "https://pay.example.com/c/abc",
+		ProviderPayload: models.JSON{
+			"data": map[string]any{
+				"token":         "TXxxxxx",
+				"actual_amount": "13.45",
+			},
+		},
+	}
+	resp := buildChannelPaymentResponse(nil, payment)
+	if got := resp["wallet_address"]; got != "TXxxxxx" {
+		t.Fatalf("wallet_address: got %v want TXxxxxx", got)
+	}
+	if got := resp["chain_amount"]; got != "13.45" {
+		t.Fatalf("chain_amount: got %v want 13.45", got)
+	}
+	if got := resp["interaction_mode"]; got != constants.PaymentInteractionQR {
+		t.Fatalf("interaction_mode: got %v want qr", got)
 	}
 }

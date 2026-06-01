@@ -2,7 +2,6 @@ package admin
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/dujiao-next/internal/cache"
 	"github.com/dujiao-next/internal/http/handlers/shared"
@@ -257,15 +256,10 @@ func (h *Handler) GetPaymentChannels(c *gin.Context) {
 
 	providerType := c.Query("provider_type")
 	channelType := c.Query("channel_type")
-	activeOnly := c.DefaultQuery("active_only", "")
-	activeOnlyBool := false
-	if activeOnly != "" {
-		parsed, err := strconv.ParseBool(activeOnly)
-		if err != nil {
-			shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
-			return
-		}
-		activeOnlyBool = parsed
+	activeOnly, err := shared.ParseQueryBool(c, "active_only")
+	if err != nil {
+		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
+		return
 	}
 
 	channels, total, err := h.PaymentService.ListChannels(repository.PaymentChannelListFilter{
@@ -273,7 +267,7 @@ func (h *Handler) GetPaymentChannels(c *gin.Context) {
 		PageSize:     pageSize,
 		ProviderType: providerType,
 		ChannelType:  channelType,
-		ActiveOnly:   activeOnlyBool,
+		ActiveOnly:   activeOnly,
 	})
 	if err != nil {
 		shared.RespondError(c, response.CodeInternal, "error.payment_channel_fetch_failed", err)

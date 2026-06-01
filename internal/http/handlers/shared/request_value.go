@@ -39,3 +39,35 @@ func ParseQueryUint(raw string, zeroInvalid bool) (uint, error) {
 	}
 	return uint(parsed), nil
 }
+
+// ParseQueryBool 解析可选查询参数中的布尔值，未传或空白返回 false。
+func ParseQueryBool(c *gin.Context, key string) (bool, error) {
+	value, err := ParseQueryBoolPtr(c, key)
+	if err != nil {
+		return false, err
+	}
+	if value == nil {
+		return false, nil
+	}
+	return *value, nil
+}
+
+// ParseQueryBoolPtr 解析可选查询参数中的布尔值，未传或空白返回 nil。
+func ParseQueryBoolPtr(c *gin.Context, key string) (*bool, error) {
+	if c == nil {
+		return nil, errors.New("context is nil")
+	}
+	raw, ok := c.GetQuery(key)
+	if !ok {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.ParseBool(trimmed)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
+}

@@ -2,7 +2,6 @@ package admin
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/dujiao-next/internal/http/handlers/shared"
 	"github.com/dujiao-next/internal/http/response"
@@ -152,14 +151,10 @@ func (h *Handler) GetAdminPromotions(c *gin.Context) {
 
 	scopeRefID, _ := shared.ParseQueryUint(c.Query("scope_ref_id"), false)
 
-	var isActive *bool
-	if raw := c.Query("is_active"); raw != "" {
-		parsed, err := strconv.ParseBool(raw)
-		if err != nil {
-			shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
-			return
-		}
-		isActive = &parsed
+	isActive, err := shared.ParseQueryBoolPtr(c, "is_active")
+	if err != nil {
+		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
+		return
 	}
 
 	promotions, total, err := h.PromotionAdminService.List(repository.PromotionListFilter{

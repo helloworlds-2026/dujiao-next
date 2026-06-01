@@ -2,7 +2,6 @@ package admin
 
 import (
 	"errors"
-	"strconv"
 	"strings"
 
 	"github.com/dujiao-next/internal/http/handlers/shared"
@@ -60,16 +59,11 @@ func (h *Handler) ListNotificationLogs(c *gin.Context) {
 	channel := strings.ToLower(strings.TrimSpace(c.Query("channel")))
 	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
 	eventType := strings.ToLower(strings.TrimSpace(c.Query("event_type")))
-	isTestRaw := strings.TrimSpace(c.Query("is_test"))
 
-	var isTest *bool
-	if isTestRaw != "" {
-		parsed, err := strconv.ParseBool(isTestRaw)
-		if err != nil {
-			shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
-			return
-		}
-		isTest = &parsed
+	isTest, err := shared.ParseQueryBoolPtr(c, "is_test")
+	if err != nil {
+		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
+		return
 	}
 
 	createdFrom, createdTo, err := shared.ParseQueryTimeRange(c, "created_from", "created_to")

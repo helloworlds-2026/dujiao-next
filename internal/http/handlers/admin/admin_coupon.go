@@ -2,7 +2,6 @@ package admin
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/dujiao-next/internal/http/handlers/shared"
 	"github.com/dujiao-next/internal/http/response"
@@ -174,14 +173,10 @@ func (h *Handler) GetAdminCoupons(c *gin.Context) {
 		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
 		return
 	}
-	var isActive *bool
-	if raw := c.Query("is_active"); raw != "" {
-		parsed, err := strconv.ParseBool(raw)
-		if err != nil {
-			shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
-			return
-		}
-		isActive = &parsed
+	isActive, err := shared.ParseQueryBoolPtr(c, "is_active")
+	if err != nil {
+		shared.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
+		return
 	}
 
 	coupons, total, err := h.CouponAdminService.List(repository.CouponListFilter{

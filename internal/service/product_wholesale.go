@@ -34,6 +34,14 @@ func normalizeWholesalePriceInputs(inputs []WholesalePriceInput) (models.Wholesa
 	sort.SliceStable(tiers, func(i, j int) bool {
 		return tiers[i].MinQuantity < tiers[j].MinQuantity
 	})
+
+	// 阶梯单价必须随门槛严格递减，否则会出现「买更多反而更贵」的反常定价，
+	// 用户可拆单规避。此处在写入侧封死，避免脏配置进入库存。
+	for i := 1; i < len(tiers); i++ {
+		if tiers[i].UnitPrice.Decimal.GreaterThanOrEqual(tiers[i-1].UnitPrice.Decimal) {
+			return nil, ErrWholesalePriceInvalid
+		}
+	}
 	return tiers, nil
 }
 
@@ -55,6 +63,8 @@ func resolveWholesaleUnitPrice(product *models.Product, baseUnitPrice decimal.De
 		return base, decimal.Zero, false
 	}
 
+	// 取满足门槛的档位中单价最低者，而非门槛最高者：即便历史脏数据存在
+	// 非单调阶梯（高门槛档单价反而更高），也能保证成交价对用户最有利。
 	var best *models.WholesalePriceTier
 	for i := range product.WholesalePrices {
 		tier := &product.WholesalePrices[i]
@@ -64,7 +74,7 @@ func resolveWholesaleUnitPrice(product *models.Product, baseUnitPrice decimal.De
 		if matchQuantity < tier.MinQuantity {
 			continue
 		}
-		if best == nil || tier.MinQuantity > best.MinQuantity {
+		if best == nil || tier.UnitPrice.Decimal.LessThan(best.UnitPrice.Decimal) {
 			best = tier
 		}
 	}

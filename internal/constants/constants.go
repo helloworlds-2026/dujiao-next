@@ -40,13 +40,14 @@ const (
 
 // 支付提供方常量
 const (
-	PaymentProviderOfficial = "official"
-	PaymentProviderEpay     = "epay"
-	PaymentProviderEpusdt   = "epusdt"
-	PaymentProviderBepusdt  = "bepusdt"
-	PaymentProviderOkpay    = "okpay"
-	PaymentProviderTokenpay = "tokenpay"
-	PaymentProviderWallet   = "wallet"
+	PaymentProviderOfficial  = "official"
+	PaymentProviderEpay      = "epay"
+	PaymentProviderEpusdt    = "epusdt"
+	PaymentProviderBepusdt   = "bepusdt"
+	PaymentProviderDujiaoPay = "dujiaopay"
+	PaymentProviderOkpay     = "okpay"
+	PaymentProviderTokenpay  = "tokenpay"
+	PaymentProviderWallet    = "wallet"
 )
 
 // 支付渠道类型常量
@@ -428,19 +429,29 @@ const (
 	SettingKeyWalletConfig        = "wallet_config"
 	SettingFieldWalletOnlyPayment = "wallet_only_payment"
 
-	SettingKeyRegistrationConfig         = "registration_config"
-	SettingFieldRegistrationEnabled      = "registration_enabled"
-	SettingFieldEmailVerificationEnabled = "email_verification_enabled"
+	SettingKeyRegistrationConfig            = "registration_config"
+	SettingFieldRegistrationEnabled         = "registration_enabled"
+	SettingFieldEmailVerificationEnabled    = "email_verification_enabled"
+	SettingFieldEmailDomainAllowlistEnabled = "email_domain_allowlist_enabled"
+	SettingFieldAllowedEmailDomains         = "allowed_email_domains"
 
 	SettingKeyOrderRiskControlConfig = "order_risk_control_config"
 
+	SettingKeyUpstreamSyncConfig        = "upstream_sync_config"
+	SettingFieldUpstreamSyncIntervalMin = "interval_minutes"
+	SettingFieldUpstreamPreOrderCheck   = "pre_order_stock_check_enabled"
+
 	SettingKeyCallbackRoutesConfig = "callback_routes_config"
-	SettingFieldPaymentCallback    = "payment_callback"
-	SettingFieldPaypalWebhook      = "paypal_webhook"
-	SettingFieldStripeWebhook      = "stripe_webhook"
-	SettingFieldUpstreamCallback   = "upstream_callback"
+
+	SettingKeyHomeAnnouncement   = "home_announcement"
+	SettingFieldPaymentCallback  = "payment_callback"
+	SettingFieldDujiaoPayWebhook = "dujiaopay_webhook"
+	SettingFieldPaypalWebhook    = "paypal_webhook"
+	SettingFieldStripeWebhook    = "stripe_webhook"
+	SettingFieldUpstreamCallback = "upstream_callback"
 
 	DefaultPaymentCallbackPath  = "/api/v1/payments/callback"
+	DefaultDujiaoPayWebhookPath = "/api/v1/payments/webhook/dujiaopay"
 	DefaultPaypalWebhookPath    = "/api/v1/payments/webhook/paypal"
 	DefaultStripeWebhookPath    = "/api/v1/payments/webhook/stripe"
 	DefaultUpstreamCallbackPath = "/api/v1/upstream/callback"

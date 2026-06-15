@@ -100,6 +100,8 @@ type TelegramAuthConfig struct {
 	Enabled                      bool   `mapstructure:"enabled"`
 	BotUsername                  string `mapstructure:"bot_username"`
 	BotToken                     string `mapstructure:"bot_token"`
+	ClientSecret                 string `mapstructure:"client_secret"`
+	OIDCRedirectURI              string `mapstructure:"oidc_redirect_uri"`
 	MiniAppURL                   string `mapstructure:"mini_app_url"`
 	TelegramUserWhitelistEnabled bool   `mapstructure:"telegram_user_whitelist_enabled"`
 	TelegramUserWhitelist        string `mapstructure:"telegram_user_whitelist"`

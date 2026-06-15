@@ -32,6 +32,7 @@ func BuiltinRoleSeeds() []RoleSeed {
 			Policies: []Policy{
 				{Object: "/admin/products", Action: "*"},
 				{Object: "/admin/products/:id", Action: "*"},
+				{Object: "/admin/products/:id/wholesale-prices", Action: "PATCH"},
 				{Object: "/admin/categories", Action: "*"},
 				{Object: "/admin/categories/:id", Action: "*"},
 				{Object: "/admin/categories/:id/active", Action: "PATCH"},
@@ -50,6 +51,7 @@ func BuiltinRoleSeeds() []RoleSeed {
 				{Object: "/admin/card-secrets/batch-status", Action: "PATCH"},
 				{Object: "/admin/card-secrets/batch-delete", Action: "POST"},
 				{Object: "/admin/card-secrets/export", Action: "POST"},
+				{Object: "/admin/card-secrets/export-available", Action: "POST"},
 				{Object: "/admin/card-secrets/stats", Action: "GET"},
 				{Object: "/admin/card-secrets/batches", Action: "GET"},
 				{Object: "/admin/card-secrets/template", Action: "GET"},
@@ -59,6 +61,7 @@ func BuiltinRoleSeeds() []RoleSeed {
 				{Object: "/admin/gift-cards/batch-status", Action: "PATCH"},
 				{Object: "/admin/gift-cards/export", Action: "POST"},
 				{Object: "/admin/upload", Action: "POST"},
+				{Object: "/admin/media/batch-delete", Action: "POST"},
 				{Object: "/admin/media/:id", Action: "PUT"},
 				{Object: "/admin/media/:id", Action: "DELETE"},
 				{Object: "/admin/affiliates/users", Action: "GET"},
@@ -96,6 +99,7 @@ func BuiltinRoleSeeds() []RoleSeed {
 				{Object: "/admin/users/:id/wallet/transactions", Action: "GET"},
 				{Object: "/admin/users/:id/wallet/adjust", Action: "POST"},
 				{Object: "/admin/users/:id/member-level", Action: "PUT"},
+				{Object: "/admin/users/:id/oauth/telegram", Action: "DELETE"},
 				{Object: "/admin/users/:id/2fa", Action: "DELETE"}, // 客服协助用户重置丢失 TOTP+恢复码 的 2FA
 				{Object: "/admin/user-login-logs", Action: "GET"},
 				{Object: "/admin/wallet/recharges", Action: "GET"},
@@ -210,6 +214,8 @@ func BuiltinRoleSeeds() []RoleSeed {
 				// Telegram Bot 群发
 				{Object: "/admin/telegram-bot/broadcasts", Action: "*"},
 				{Object: "/admin/telegram-bot/users", Action: "GET"},
+				// 合规声明（GET 已由 readonly_auditor 的 /admin/* GET 通配覆盖）
+				{Object: "/admin/compliance/acknowledge", Action: "POST"},
 			},
 			Immutable: true,
 		},

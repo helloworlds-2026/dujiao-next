@@ -40,6 +40,11 @@ type StripeWebhookQuery struct {
 	ChannelID uint `form:"channel_id"`
 }
 
+// DujiaoPayWebhookQuery DujiaoPay webhook 查询参数。
+type DujiaoPayWebhookQuery struct {
+	ChannelID uint `form:"channel_id"`
+}
+
 const callbackLogValueLimit = 4096
 
 // CreatePayment 创建支付单

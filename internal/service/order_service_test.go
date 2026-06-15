@@ -96,6 +96,92 @@ func TestResolveManualFormSubmissionFallbackLegacyProductKey(t *testing.T) {
 	}
 }
 
+type orderPurchaseQuantityLimitFixture struct {
+	dsnPrefix       string
+	categorySlug    string
+	productSlug     string
+	minQuantity     int
+	maxQuantity     int
+	requestQuantity int
+	expectedErr     error
+}
+
+func assertBuildOrderResultRejectsPurchaseQuantity(t *testing.T, fixture orderPurchaseQuantityLimitFixture) {
+	t.Helper()
+	dsn := fmt.Sprintf("file:%s_%d?mode=memory&cache=shared", fixture.dsnPrefix, time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite failed: %v", err)
+	}
+	if err := db.AutoMigrate(&models.Category{}, &models.Product{}, &models.ProductSKU{}, &models.Promotion{}); err != nil {
+		t.Fatalf("auto migrate failed: %v", err)
+	}
+
+	now := time.Now()
+	category := models.Category{
+		Slug:      fixture.categorySlug,
+		NameJSON:  models.JSON{"zh-CN": "测试分类"},
+		SortOrder: 0,
+		CreatedAt: now,
+	}
+	if err := db.Create(&category).Error; err != nil {
+		t.Fatalf("create category failed: %v", err)
+	}
+
+	product := models.Product{
+		CategoryID:          category.ID,
+		Slug:                fixture.productSlug,
+		TitleJSON:           models.JSON{"zh-CN": "测试商品"},
+		PriceAmount:         models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
+		PurchaseType:        constants.ProductPurchaseMember,
+		FulfillmentType:     constants.FulfillmentTypeManual,
+		MinPurchaseQuantity: fixture.minQuantity,
+		MaxPurchaseQuantity: fixture.maxQuantity,
+		IsActive:            true,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+	}
+	if err := db.Create(&product).Error; err != nil {
+		t.Fatalf("create product failed: %v", err)
+	}
+
+	sku := models.ProductSKU{
+		ProductID:         product.ID,
+		SKUCode:           models.DefaultSKUCode,
+		PriceAmount:       models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
+		IsActive:          true,
+		ManualStockTotal:  constants.ManualStockUnlimited,
+		ManualStockLocked: 0,
+		ManualStockSold:   0,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+	if err := db.Create(&sku).Error; err != nil {
+		t.Fatalf("create sku failed: %v", err)
+	}
+
+	svc := NewOrderService(OrderServiceOptions{
+		ProductRepo:    repository.NewProductRepository(db),
+		ProductSKURepo: repository.NewProductSKURepository(db),
+		PromotionRepo:  repository.NewPromotionRepository(db),
+		ExpireMinutes:  15,
+	})
+
+	_, err = svc.buildOrderResult(orderCreateParams{
+		UserID: 1,
+		Items: []CreateOrderItem{
+			{
+				ProductID: product.ID,
+				SKUID:     sku.ID,
+				Quantity:  fixture.requestQuantity,
+			},
+		},
+	})
+	if !errors.Is(err, fixture.expectedErr) {
+		t.Fatalf("expected %v, got: %v", fixture.expectedErr, err)
+	}
+}
+
 func TestCalcParentStatus(t *testing.T) {
 	children := []models.Order{
 		{Status: constants.OrderStatusDelivered},
@@ -217,6 +303,316 @@ func TestIsTransitionAllowedRefunded(t *testing.T) {
 	}
 	if isTransitionAllowed(constants.OrderStatusCanceled, constants.OrderStatusRefunded) {
 		t.Fatalf("expected canceled to refunded transition to be rejected")
+	}
+}
+
+func TestCancelExpiredOrderExpiresPendingPayments(t *testing.T) {
+	dsn := fmt.Sprintf("file:order_service_expire_payments_%d?mode=memory&cache=shared", time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite failed: %v", err)
+	}
+	if err := db.AutoMigrate(
+		&models.Order{},
+		&models.OrderItem{},
+		&models.Fulfillment{},
+		&models.Product{},
+		&models.ProductSKU{},
+		&models.Coupon{},
+		&models.CouponUsage{},
+		&models.Payment{},
+	); err != nil {
+		t.Fatalf("auto migrate failed: %v", err)
+	}
+
+	now := time.Now()
+	expiresAt := now.Add(-time.Hour)
+	order := &models.Order{
+		OrderNo:          "EXPIRE-PAYMENT-001",
+		Status:           constants.OrderStatusPendingPayment,
+		Currency:         "CNY",
+		OriginalAmount:   models.NewMoneyFromDecimal(decimal.NewFromInt(100)),
+		DiscountAmount:   models.NewMoneyFromDecimal(decimal.Zero),
+		TotalAmount:      models.NewMoneyFromDecimal(decimal.NewFromInt(100)),
+		WalletPaidAmount: models.NewMoneyFromDecimal(decimal.Zero),
+		OnlinePaidAmount: models.NewMoneyFromDecimal(decimal.NewFromInt(100)),
+		RefundedAmount:   models.NewMoneyFromDecimal(decimal.Zero),
+		ExpiresAt:        &expiresAt,
+		CreatedAt:        now.Add(-2 * time.Hour),
+		UpdatedAt:        now.Add(-2 * time.Hour),
+	}
+	if err := db.Create(order).Error; err != nil {
+		t.Fatalf("create order failed: %v", err)
+	}
+
+	pendingPayment := &models.Payment{
+		OrderID:         order.ID,
+		ChannelID:       1,
+		ProviderType:    constants.PaymentProviderEpay,
+		ChannelType:     "alipay",
+		InteractionMode: constants.PaymentInteractionQR,
+		Amount:          models.NewMoneyFromDecimal(decimal.NewFromInt(100)),
+		Currency:        "CNY",
+		Status:          constants.PaymentStatusPending,
+		CreatedAt:       now.Add(-2 * time.Hour),
+		UpdatedAt:       now.Add(-2 * time.Hour),
+	}
+	initiatedPayment := &models.Payment{
+		OrderID:         order.ID,
+		ChannelID:       1,
+		ProviderType:    constants.PaymentProviderEpay,
+		ChannelType:     "alipay",
+		InteractionMode: constants.PaymentInteractionQR,
+		Amount:          models.NewMoneyFromDecimal(decimal.NewFromInt(100)),
+		Currency:        "CNY",
+		Status:          constants.PaymentStatusInitiated,
+		CreatedAt:       now.Add(-2 * time.Hour),
+		UpdatedAt:       now.Add(-2 * time.Hour),
+	}
+	successPayment := &models.Payment{
+		OrderID:         order.ID,
+		ChannelID:       1,
+		ProviderType:    constants.PaymentProviderEpay,
+		ChannelType:     "alipay",
+		InteractionMode: constants.PaymentInteractionQR,
+		Amount:          models.NewMoneyFromDecimal(decimal.NewFromInt(100)),
+		Currency:        "CNY",
+		Status:          constants.PaymentStatusSuccess,
+		CreatedAt:       now.Add(-2 * time.Hour),
+		UpdatedAt:       now.Add(-2 * time.Hour),
+		PaidAt:          &now,
+	}
+	if err := db.Create([]*models.Payment{pendingPayment, initiatedPayment, successPayment}).Error; err != nil {
+		t.Fatalf("create payments failed: %v", err)
+	}
+
+	svc := NewOrderService(OrderServiceOptions{
+		OrderRepo:       repository.NewOrderRepository(db),
+		PaymentRepo:     repository.NewPaymentRepository(db),
+		ProductRepo:     repository.NewProductRepository(db),
+		ProductSKURepo:  repository.NewProductSKURepository(db),
+		CouponRepo:      repository.NewCouponRepository(db),
+		CouponUsageRepo: repository.NewCouponUsageRepository(db),
+	})
+	updated, err := svc.CancelExpiredOrder(order.ID)
+	if err != nil {
+		t.Fatalf("cancel expired order failed: %v", err)
+	}
+	if updated == nil || updated.Status != constants.OrderStatusCanceled {
+		t.Fatalf("expected canceled order, got: %+v", updated)
+	}
+
+	var reloaded []models.Payment
+	if err := db.Order("id asc").Find(&reloaded, "order_id = ?", order.ID).Error; err != nil {
+		t.Fatalf("reload payments failed: %v", err)
+	}
+	if len(reloaded) != 3 {
+		t.Fatalf("expected 3 payments, got %d", len(reloaded))
+	}
+	if reloaded[0].Status != constants.PaymentStatusExpired || reloaded[0].ExpiredAt == nil {
+		t.Fatalf("pending payment should expire, got status=%s expired_at=%v", reloaded[0].Status, reloaded[0].ExpiredAt)
+	}
+	if reloaded[1].Status != constants.PaymentStatusExpired || reloaded[1].ExpiredAt == nil {
+		t.Fatalf("initiated payment should expire, got status=%s expired_at=%v", reloaded[1].Status, reloaded[1].ExpiredAt)
+	}
+	if reloaded[2].Status != constants.PaymentStatusSuccess || reloaded[2].ExpiredAt != nil {
+		t.Fatalf("success payment should stay success without expired_at, got status=%s expired_at=%v", reloaded[2].Status, reloaded[2].ExpiredAt)
+	}
+}
+
+func setupCancelPaymentTestDB(t *testing.T, namespace string) *gorm.DB {
+	t.Helper()
+	dsn := fmt.Sprintf("file:order_service_%s_%d?mode=memory&cache=shared", namespace, time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite failed: %v", err)
+	}
+	if err := db.AutoMigrate(
+		&models.Order{},
+		&models.OrderItem{},
+		&models.Fulfillment{},
+		&models.Product{},
+		&models.ProductSKU{},
+		&models.Coupon{},
+		&models.CouponUsage{},
+		&models.Payment{},
+	); err != nil {
+		t.Fatalf("auto migrate failed: %v", err)
+	}
+	return db
+}
+
+func newPendingOrderForCancel(orderNo string, userID uint, parentID *uint, now time.Time) *models.Order {
+	return &models.Order{
+		OrderNo:          orderNo,
+		UserID:           userID,
+		ParentID:         parentID,
+		Status:           constants.OrderStatusPendingPayment,
+		Currency:         "CNY",
+		OriginalAmount:   models.NewMoneyFromDecimal(decimal.NewFromInt(100)),
+		DiscountAmount:   models.NewMoneyFromDecimal(decimal.Zero),
+		TotalAmount:      models.NewMoneyFromDecimal(decimal.NewFromInt(100)),
+		WalletPaidAmount: models.NewMoneyFromDecimal(decimal.Zero),
+		OnlinePaidAmount: models.NewMoneyFromDecimal(decimal.NewFromInt(100)),
+		RefundedAmount:   models.NewMoneyFromDecimal(decimal.Zero),
+		CreatedAt:        now.Add(-2 * time.Hour),
+		UpdatedAt:        now.Add(-2 * time.Hour),
+	}
+}
+
+func newPaymentForOrder(orderID uint, status string, now time.Time) *models.Payment {
+	return &models.Payment{
+		OrderID:         orderID,
+		ChannelID:       1,
+		ProviderType:    constants.PaymentProviderEpay,
+		ChannelType:     "alipay",
+		InteractionMode: constants.PaymentInteractionQR,
+		Amount:          models.NewMoneyFromDecimal(decimal.NewFromInt(100)),
+		Currency:        "CNY",
+		Status:          status,
+		CreatedAt:       now.Add(-2 * time.Hour),
+		UpdatedAt:       now.Add(-2 * time.Hour),
+	}
+}
+
+func TestCancelOrderExpiresPendingPayments(t *testing.T) {
+	db := setupCancelPaymentTestDB(t, "user_cancel_expire_payments")
+
+	now := time.Now()
+	const userID uint = 42
+	order := newPendingOrderForCancel("USER-CANCEL-001", userID, nil, now)
+	if err := db.Create(order).Error; err != nil {
+		t.Fatalf("create order failed: %v", err)
+	}
+
+	pending := newPaymentForOrder(order.ID, constants.PaymentStatusPending, now)
+	initiated := newPaymentForOrder(order.ID, constants.PaymentStatusInitiated, now)
+	if err := db.Create([]*models.Payment{pending, initiated}).Error; err != nil {
+		t.Fatalf("create payments failed: %v", err)
+	}
+
+	svc := NewOrderService(OrderServiceOptions{
+		OrderRepo:       repository.NewOrderRepository(db),
+		PaymentRepo:     repository.NewPaymentRepository(db),
+		ProductRepo:     repository.NewProductRepository(db),
+		ProductSKURepo:  repository.NewProductSKURepository(db),
+		CouponRepo:      repository.NewCouponRepository(db),
+		CouponUsageRepo: repository.NewCouponUsageRepository(db),
+	})
+	updated, err := svc.CancelOrder(order.ID, userID)
+	if err != nil {
+		t.Fatalf("cancel order failed: %v", err)
+	}
+	if updated == nil || updated.Status != constants.OrderStatusCanceled {
+		t.Fatalf("expected canceled order, got: %+v", updated)
+	}
+
+	var reloaded []models.Payment
+	if err := db.Order("id asc").Find(&reloaded, "order_id = ?", order.ID).Error; err != nil {
+		t.Fatalf("reload payments failed: %v", err)
+	}
+	if len(reloaded) != 2 {
+		t.Fatalf("expected 2 payments, got %d", len(reloaded))
+	}
+	for _, p := range reloaded {
+		if p.Status != constants.PaymentStatusExpired || p.ExpiredAt == nil {
+			t.Fatalf("payment %d should expire, got status=%s expired_at=%v", p.ID, p.Status, p.ExpiredAt)
+		}
+	}
+}
+
+func TestUpdateOrderStatusAdminCancelExpiresPendingPaymentsSingleOrder(t *testing.T) {
+	db := setupCancelPaymentTestDB(t, "admin_cancel_expire_payments_single")
+
+	now := time.Now()
+	order := newPendingOrderForCancel("ADMIN-CANCEL-SINGLE-001", 0, nil, now)
+	if err := db.Create(order).Error; err != nil {
+		t.Fatalf("create order failed: %v", err)
+	}
+
+	pending := newPaymentForOrder(order.ID, constants.PaymentStatusPending, now)
+	if err := db.Create(pending).Error; err != nil {
+		t.Fatalf("create payment failed: %v", err)
+	}
+
+	svc := NewOrderService(OrderServiceOptions{
+		OrderRepo:       repository.NewOrderRepository(db),
+		PaymentRepo:     repository.NewPaymentRepository(db),
+		ProductRepo:     repository.NewProductRepository(db),
+		ProductSKURepo:  repository.NewProductSKURepository(db),
+		CouponRepo:      repository.NewCouponRepository(db),
+		CouponUsageRepo: repository.NewCouponUsageRepository(db),
+	})
+	updated, err := svc.UpdateOrderStatus(order.ID, constants.OrderStatusCanceled)
+	if err != nil {
+		t.Fatalf("update order status failed: %v", err)
+	}
+	if updated == nil || updated.Status != constants.OrderStatusCanceled {
+		t.Fatalf("expected canceled order, got: %+v", updated)
+	}
+
+	var reloaded models.Payment
+	if err := db.First(&reloaded, pending.ID).Error; err != nil {
+		t.Fatalf("reload payment failed: %v", err)
+	}
+	if reloaded.Status != constants.PaymentStatusExpired || reloaded.ExpiredAt == nil {
+		t.Fatalf("payment should expire, got status=%s expired_at=%v", reloaded.Status, reloaded.ExpiredAt)
+	}
+}
+
+func TestCancelExpiredOrderExpiresPaymentsForParentAndChildren(t *testing.T) {
+	db := setupCancelPaymentTestDB(t, "expire_payments_parent_children")
+
+	now := time.Now()
+	expiresAt := now.Add(-time.Hour)
+	parent := newPendingOrderForCancel("PARENT-EXPIRE-001", 0, nil, now)
+	parent.ExpiresAt = &expiresAt
+	if err := db.Create(parent).Error; err != nil {
+		t.Fatalf("create parent failed: %v", err)
+	}
+
+	childA := newPendingOrderForCancel("PARENT-EXPIRE-001-A", 0, &parent.ID, now)
+	childA.ExpiresAt = &expiresAt
+	if err := db.Create(childA).Error; err != nil {
+		t.Fatalf("create childA failed: %v", err)
+	}
+	childB := newPendingOrderForCancel("PARENT-EXPIRE-001-B", 0, &parent.ID, now)
+	childB.ExpiresAt = &expiresAt
+	if err := db.Create(childB).Error; err != nil {
+		t.Fatalf("create childB failed: %v", err)
+	}
+
+	parentPayment := newPaymentForOrder(parent.ID, constants.PaymentStatusPending, now)
+	childAPayment := newPaymentForOrder(childA.ID, constants.PaymentStatusInitiated, now)
+	childBPayment := newPaymentForOrder(childB.ID, constants.PaymentStatusPending, now)
+	if err := db.Create([]*models.Payment{parentPayment, childAPayment, childBPayment}).Error; err != nil {
+		t.Fatalf("create payments failed: %v", err)
+	}
+
+	svc := NewOrderService(OrderServiceOptions{
+		OrderRepo:       repository.NewOrderRepository(db),
+		PaymentRepo:     repository.NewPaymentRepository(db),
+		ProductRepo:     repository.NewProductRepository(db),
+		ProductSKURepo:  repository.NewProductSKURepository(db),
+		CouponRepo:      repository.NewCouponRepository(db),
+		CouponUsageRepo: repository.NewCouponUsageRepository(db),
+	})
+	updated, err := svc.CancelExpiredOrder(parent.ID)
+	if err != nil {
+		t.Fatalf("cancel expired parent failed: %v", err)
+	}
+	if updated == nil || updated.Status != constants.OrderStatusCanceled {
+		t.Fatalf("expected canceled parent, got: %+v", updated)
+	}
+
+	for _, pid := range []uint{parentPayment.ID, childAPayment.ID, childBPayment.ID} {
+		var p models.Payment
+		if err := db.First(&p, pid).Error; err != nil {
+			t.Fatalf("reload payment %d failed: %v", pid, err)
+		}
+		if p.Status != constants.PaymentStatusExpired || p.ExpiredAt == nil {
+			t.Fatalf("payment %d should expire, got status=%s expired_at=%v", pid, p.Status, p.ExpiredAt)
+		}
 	}
 }
 
@@ -734,151 +1130,25 @@ func TestBuildOrderResultStacksPromotionAndMemberDiscount(t *testing.T) {
 }
 
 func TestBuildOrderResultRejectsProductMaxPurchaseQuantityExceeded(t *testing.T) {
-	dsn := fmt.Sprintf("file:order_service_purchase_limit_%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite failed: %v", err)
-	}
-	if err := db.AutoMigrate(&models.Category{}, &models.Product{}, &models.ProductSKU{}, &models.Promotion{}); err != nil {
-		t.Fatalf("auto migrate failed: %v", err)
-	}
-
-	now := time.Now()
-	category := models.Category{
-		Slug:      "test-category-limit",
-		NameJSON:  models.JSON{"zh-CN": "测试分类"},
-		SortOrder: 0,
-		CreatedAt: now,
-	}
-	if err := db.Create(&category).Error; err != nil {
-		t.Fatalf("create category failed: %v", err)
-	}
-
-	product := models.Product{
-		CategoryID:          category.ID,
-		Slug:                "test-product-limit",
-		TitleJSON:           models.JSON{"zh-CN": "测试商品"},
-		PriceAmount:         models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
-		PurchaseType:        constants.ProductPurchaseMember,
-		FulfillmentType:     constants.FulfillmentTypeManual,
-		MaxPurchaseQuantity: 2,
-		IsActive:            true,
-		CreatedAt:           now,
-		UpdatedAt:           now,
-	}
-	if err := db.Create(&product).Error; err != nil {
-		t.Fatalf("create product failed: %v", err)
-	}
-
-	sku := models.ProductSKU{
-		ProductID:         product.ID,
-		SKUCode:           models.DefaultSKUCode,
-		PriceAmount:       models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
-		IsActive:          true,
-		ManualStockTotal:  constants.ManualStockUnlimited,
-		ManualStockLocked: 0,
-		ManualStockSold:   0,
-		CreatedAt:         now,
-		UpdatedAt:         now,
-	}
-	if err := db.Create(&sku).Error; err != nil {
-		t.Fatalf("create sku failed: %v", err)
-	}
-
-	svc := NewOrderService(OrderServiceOptions{
-		ProductRepo:    repository.NewProductRepository(db),
-		ProductSKURepo: repository.NewProductSKURepository(db),
-		PromotionRepo:  repository.NewPromotionRepository(db),
-		ExpireMinutes:  15,
+	assertBuildOrderResultRejectsPurchaseQuantity(t, orderPurchaseQuantityLimitFixture{
+		dsnPrefix:       "order_service_purchase_limit",
+		categorySlug:    "test-category-limit",
+		productSlug:     "test-product-limit",
+		maxQuantity:     2,
+		requestQuantity: 3,
+		expectedErr:     ErrProductMaxPurchaseExceeded,
 	})
-
-	_, err = svc.buildOrderResult(orderCreateParams{
-		UserID: 1,
-		Items: []CreateOrderItem{
-			{
-				ProductID: product.ID,
-				SKUID:     sku.ID,
-				Quantity:  3,
-			},
-		},
-	})
-	if !errors.Is(err, ErrProductMaxPurchaseExceeded) {
-		t.Fatalf("expected product max purchase exceeded, got: %v", err)
-	}
 }
 
 func TestBuildOrderResultRejectsProductMinPurchaseQuantityNotMet(t *testing.T) {
-	dsn := fmt.Sprintf("file:order_service_purchase_min_%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	if err != nil {
-		t.Fatalf("open sqlite failed: %v", err)
-	}
-	if err := db.AutoMigrate(&models.Category{}, &models.Product{}, &models.ProductSKU{}, &models.Promotion{}); err != nil {
-		t.Fatalf("auto migrate failed: %v", err)
-	}
-
-	now := time.Now()
-	category := models.Category{
-		Slug:      "test-category-min-limit",
-		NameJSON:  models.JSON{"zh-CN": "测试分类"},
-		SortOrder: 0,
-		CreatedAt: now,
-	}
-	if err := db.Create(&category).Error; err != nil {
-		t.Fatalf("create category failed: %v", err)
-	}
-
-	product := models.Product{
-		CategoryID:          category.ID,
-		Slug:                "test-product-min-limit",
-		TitleJSON:           models.JSON{"zh-CN": "测试商品"},
-		PriceAmount:         models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
-		PurchaseType:        constants.ProductPurchaseMember,
-		FulfillmentType:     constants.FulfillmentTypeManual,
-		MinPurchaseQuantity: 3,
-		IsActive:            true,
-		CreatedAt:           now,
-		UpdatedAt:           now,
-	}
-	if err := db.Create(&product).Error; err != nil {
-		t.Fatalf("create product failed: %v", err)
-	}
-
-	sku := models.ProductSKU{
-		ProductID:         product.ID,
-		SKUCode:           models.DefaultSKUCode,
-		PriceAmount:       models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
-		IsActive:          true,
-		ManualStockTotal:  constants.ManualStockUnlimited,
-		ManualStockLocked: 0,
-		ManualStockSold:   0,
-		CreatedAt:         now,
-		UpdatedAt:         now,
-	}
-	if err := db.Create(&sku).Error; err != nil {
-		t.Fatalf("create sku failed: %v", err)
-	}
-
-	svc := NewOrderService(OrderServiceOptions{
-		ProductRepo:    repository.NewProductRepository(db),
-		ProductSKURepo: repository.NewProductSKURepository(db),
-		PromotionRepo:  repository.NewPromotionRepository(db),
-		ExpireMinutes:  15,
+	assertBuildOrderResultRejectsPurchaseQuantity(t, orderPurchaseQuantityLimitFixture{
+		dsnPrefix:       "order_service_purchase_min",
+		categorySlug:    "test-category-min-limit",
+		productSlug:     "test-product-min-limit",
+		minQuantity:     3,
+		requestQuantity: 2,
+		expectedErr:     ErrProductMinPurchaseNotMet,
 	})
-
-	_, err = svc.buildOrderResult(orderCreateParams{
-		UserID: 1,
-		Items: []CreateOrderItem{
-			{
-				ProductID: product.ID,
-				SKUID:     sku.ID,
-				Quantity:  2,
-			},
-		},
-	})
-	if !errors.Is(err, ErrProductMinPurchaseNotMet) {
-		t.Fatalf("expected product min purchase not met, got: %v", err)
-	}
 }
 
 func TestBuildOrderResultOriginalAmountBeforePromotion(t *testing.T) {

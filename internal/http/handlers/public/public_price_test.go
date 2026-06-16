@@ -437,6 +437,10 @@ func (r *resellerPricingRepoForPublicTest) GetOrCreateBalanceAccountForUpdate(re
 	return &models.ResellerBalanceAccount{ResellerID: resellerID, Currency: currency, Status: models.ResellerBalanceStatusNormal}, nil
 }
 
+func (r *resellerPricingRepoForPublicTest) ListBalanceAccounts(filter repository.ResellerBalanceAccountListFilter) ([]models.ResellerBalanceAccount, int64, error) {
+	return []models.ResellerBalanceAccount{}, 0, nil
+}
+
 func (r *resellerPricingRepoForPublicTest) UpdateBalanceAccount(account *models.ResellerBalanceAccount) error {
 	return nil
 }

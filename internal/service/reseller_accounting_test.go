@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -83,6 +84,62 @@ func TestResellerAccountingServiceListAdminWithdrawRequests(t *testing.T) {
 	}
 	if total != 1 || len(rows) != 1 || rows[0].ID != req.ID {
 		t.Fatalf("expected created withdraw, total=%d rows=%+v", total, rows)
+	}
+}
+
+func TestResellerAccountingServiceGetUserFinanceDashboardScopesToUserProfile(t *testing.T) {
+	db := openResellerAccountingServiceTestDB(t)
+	repo := repository.NewResellerRepository(db)
+	svc := NewResellerAccountingService(repo, ResellerAccountingOptions{})
+	profile := seedResellerAccountingProfile(t, db)
+	other := seedResellerAccountingProfile(t, db)
+	if err := db.Create(&models.ResellerBalanceAccount{
+		ResellerID:           profile.ID,
+		Currency:             "USD",
+		Status:               models.ResellerBalanceStatusNormal,
+		AvailableAmountCache: models.NewMoneyFromDecimal(decimal.RequireFromString("18.50")),
+	}).Error; err != nil {
+		t.Fatalf("create balance failed: %v", err)
+	}
+	if err := db.Create(&models.ResellerBalanceAccount{
+		ResellerID:           other.ID,
+		Currency:             "USD",
+		Status:               models.ResellerBalanceStatusNormal,
+		AvailableAmountCache: models.NewMoneyFromDecimal(decimal.RequireFromString("99.00")),
+	}).Error; err != nil {
+		t.Fatalf("create other balance failed: %v", err)
+	}
+
+	dashboard, err := svc.GetUserFinanceDashboard(profile.UserID)
+	if err != nil {
+		t.Fatalf("GetUserFinanceDashboard failed: %v", err)
+	}
+	if !dashboard.Opened || dashboard.Profile == nil || dashboard.Profile.ID != profile.ID {
+		t.Fatalf("expected opened dashboard for profile %d, got %+v", profile.ID, dashboard)
+	}
+	if len(dashboard.Balances) != 1 || dashboard.Balances[0].AvailableAmountCache.String() != "18.50" {
+		t.Fatalf("expected scoped balances, got %+v", dashboard.Balances)
+	}
+}
+
+func TestResellerAccountingServiceApplyUserWithdrawRequiresActiveNormalProfile(t *testing.T) {
+	db := openResellerAccountingServiceTestDB(t)
+	repo := repository.NewResellerRepository(db)
+	svc := NewResellerAccountingService(repo, ResellerAccountingOptions{})
+	profile := seedResellerAccountingProfile(t, db)
+	profile.Status = models.ResellerProfileStatusDisabled
+	if err := db.Save(&profile).Error; err != nil {
+		t.Fatalf("disable profile failed: %v", err)
+	}
+
+	_, err := svc.ApplyUserWithdraw(profile.UserID, ResellerWithdrawApplyInput{
+		Amount:   decimal.NewFromInt(10),
+		Currency: "USD",
+		Channel:  "USDT",
+		Account:  "T-address",
+	})
+	if !errors.Is(err, ErrResellerProfileInactive) {
+		t.Fatalf("expected ErrResellerProfileInactive, got %v", err)
 	}
 }
 

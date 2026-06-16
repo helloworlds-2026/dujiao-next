@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -63,12 +64,140 @@ type ResellerAdminWithdrawListFilter struct {
 	CreatedTo   *time.Time
 }
 
+type ResellerUserFinanceDashboard struct {
+	Opened   bool
+	Profile  *models.ResellerProfile
+	Balances []models.ResellerBalanceAccount
+}
+
+type ResellerUserLedgerListFilter struct {
+	Page     int
+	PageSize int
+	Currency string
+	Type     string
+	Status   string
+	OrderID  uint
+}
+
+type ResellerUserBalanceAccountListFilter struct {
+	Page     int
+	PageSize int
+	Currency string
+	Status   string
+}
+
+type ResellerUserWithdrawListFilter struct {
+	Page     int
+	PageSize int
+	Currency string
+	Status   string
+}
+
 func NewResellerAccountingService(repo repository.ResellerRepository, opts ResellerAccountingOptions) *ResellerAccountingService {
 	days := opts.ConfirmDays
 	if days < 0 {
 		days = 0
 	}
 	return &ResellerAccountingService{repo: repo, confirmDays: days}
+}
+
+func (s *ResellerAccountingService) getResellerProfileByUserID(userID uint) (*models.ResellerProfile, error) {
+	if s == nil || s.repo == nil || userID == 0 {
+		return nil, ErrResellerNotOpened
+	}
+	profile, err := s.repo.GetProfileByUserID(userID)
+	if err != nil {
+		return nil, err
+	}
+	if profile == nil {
+		return nil, ErrResellerNotOpened
+	}
+	return profile, nil
+}
+
+func requireActiveResellerProfile(profile *models.ResellerProfile) error {
+	if profile == nil {
+		return ErrResellerNotOpened
+	}
+	if profile.Status != models.ResellerProfileStatusActive {
+		return ErrResellerProfileInactive
+	}
+	if profile.SettlementStatus != "" && profile.SettlementStatus != models.ResellerSettlementStatusNormal {
+		return ErrResellerSettlementUnavailable
+	}
+	return nil
+}
+
+func (s *ResellerAccountingService) GetUserFinanceDashboard(userID uint) (ResellerUserFinanceDashboard, error) {
+	profile, err := s.getResellerProfileByUserID(userID)
+	if errors.Is(err, ErrResellerNotOpened) {
+		return ResellerUserFinanceDashboard{Opened: false}, nil
+	}
+	if err != nil {
+		return ResellerUserFinanceDashboard{}, err
+	}
+	balances, _, err := s.repo.ListBalanceAccounts(repository.ResellerBalanceAccountListFilter{
+		Page:       1,
+		PageSize:   100,
+		ResellerID: profile.ID,
+	})
+	if err != nil {
+		return ResellerUserFinanceDashboard{}, err
+	}
+	return ResellerUserFinanceDashboard{Opened: true, Profile: profile, Balances: balances}, nil
+}
+
+func (s *ResellerAccountingService) ListUserBalanceAccounts(userID uint, filter ResellerUserBalanceAccountListFilter) ([]models.ResellerBalanceAccount, int64, error) {
+	profile, err := s.getResellerProfileByUserID(userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := requireActiveResellerProfile(profile); err != nil {
+		return nil, 0, err
+	}
+	return s.repo.ListBalanceAccounts(repository.ResellerBalanceAccountListFilter{
+		Page:       filter.Page,
+		PageSize:   filter.PageSize,
+		ResellerID: profile.ID,
+		Currency:   strings.TrimSpace(filter.Currency),
+		Status:     strings.TrimSpace(filter.Status),
+	})
+}
+
+func (s *ResellerAccountingService) ListUserLedgerEntries(userID uint, filter ResellerUserLedgerListFilter) ([]models.ResellerLedgerEntry, int64, error) {
+	profile, err := s.getResellerProfileByUserID(userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := requireActiveResellerProfile(profile); err != nil {
+		return nil, 0, err
+	}
+	return s.repo.ListLedgerEntries(repository.ResellerLedgerListFilter{
+		Page:       filter.Page,
+		PageSize:   filter.PageSize,
+		ResellerID: profile.ID,
+		Currency:   strings.TrimSpace(filter.Currency),
+		Type:       strings.TrimSpace(filter.Type),
+		Status:     strings.TrimSpace(filter.Status),
+		OrderID:    filter.OrderID,
+	})
+}
+
+func (s *ResellerAccountingService) ListUserWithdrawRequests(userID uint, filter ResellerUserWithdrawListFilter) ([]models.ResellerWithdrawRequest, int64, error) {
+	profile, err := s.getResellerProfileByUserID(userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := requireActiveResellerProfile(profile); err != nil {
+		return nil, 0, err
+	}
+	return s.repo.ListWithdrawRequests(repository.ResellerWithdrawListFilter{
+		Page:       filter.Page,
+		PageSize:   filter.PageSize,
+		ResellerID: profile.ID,
+		Currency:   strings.TrimSpace(filter.Currency),
+		Status:     strings.TrimSpace(filter.Status),
+	})
 }
 
 func (s *ResellerAccountingService) ListAdminLedgerEntries(filter ResellerAdminLedgerListFilter) ([]models.ResellerLedgerEntry, int64, error) {
@@ -361,6 +490,17 @@ type ResellerWithdrawApplyInput struct {
 	Currency string
 	Channel  string
 	Account  string
+}
+
+func (s *ResellerAccountingService) ApplyUserWithdraw(userID uint, input ResellerWithdrawApplyInput) (*models.ResellerWithdrawRequest, error) {
+	profile, err := s.getResellerProfileByUserID(userID)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireActiveResellerProfile(profile); err != nil {
+		return nil, err
+	}
+	return s.ApplyWithdraw(profile.ID, input)
 }
 
 func (s *ResellerAccountingService) ApplyWithdraw(resellerID uint, input ResellerWithdrawApplyInput) (*models.ResellerWithdrawRequest, error) {

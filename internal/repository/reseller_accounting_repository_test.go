@@ -271,6 +271,57 @@ func TestResellerAccountingRepositoryListAdminBalanceAccountsFiltersAndPreloadsP
 	}
 }
 
+func TestResellerAccountingRepositoryListBalanceAccountsScopesByReseller(t *testing.T) {
+	db := openResellerAccountingRepoTestDB(t)
+	repo := NewResellerRepository(db)
+	profile := seedResellerAccountingProfileWithEmail(t, db, "user-balance@example.com")
+	other := seedResellerAccountingProfileWithEmail(t, db, "other-user-balance@example.com")
+
+	rows := []models.ResellerBalanceAccount{
+		{
+			ResellerID:           profile.ID,
+			Currency:             "USD",
+			Status:               models.ResellerBalanceStatusNormal,
+			AvailableAmountCache: models.NewMoneyFromDecimal(decimal.RequireFromString("12.30")),
+			LockedAmountCache:    models.NewMoneyFromDecimal(decimal.RequireFromString("1.00")),
+			NegativeAmountCache:  models.NewMoneyFromDecimal(decimal.Zero),
+			LastLedgerEntryID:    11,
+		},
+		{
+			ResellerID:           other.ID,
+			Currency:             "USD",
+			Status:               models.ResellerBalanceStatusNormal,
+			AvailableAmountCache: models.NewMoneyFromDecimal(decimal.RequireFromString("99.00")),
+		},
+		{
+			ResellerID:           profile.ID,
+			Currency:             "EUR",
+			Status:               models.ResellerBalanceStatusDisabled,
+			AvailableAmountCache: models.NewMoneyFromDecimal(decimal.RequireFromString("8.00")),
+		},
+	}
+	if err := db.Create(&rows).Error; err != nil {
+		t.Fatalf("create balance rows failed: %v", err)
+	}
+
+	got, total, err := repo.ListBalanceAccounts(ResellerBalanceAccountListFilter{
+		Page:       1,
+		PageSize:   20,
+		ResellerID: profile.ID,
+		Currency:   "USD",
+		Status:     models.ResellerBalanceStatusNormal,
+	})
+	if err != nil {
+		t.Fatalf("ListBalanceAccounts failed: %v", err)
+	}
+	if total != 1 || len(got) != 1 {
+		t.Fatalf("expected one scoped balance row, total=%d len=%d", total, len(got))
+	}
+	if got[0].ResellerID != profile.ID || got[0].Currency != "USD" || got[0].AvailableAmountCache.String() != "12.30" {
+		t.Fatalf("unexpected balance row: %+v", got[0])
+	}
+}
+
 func TestResellerAccountingRepositoryListAdminWithdrawRequestsFiltersAndPreloadsProcessor(t *testing.T) {
 	db := openResellerAccountingRepoTestDB(t)
 	repo := NewResellerRepository(db)

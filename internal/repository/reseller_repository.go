@@ -34,6 +34,7 @@ type ResellerRepository interface {
 	ListLedgerEntries(filter ResellerLedgerListFilter) ([]models.ResellerLedgerEntry, int64, error)
 	SumLedgerAmount(resellerID uint, currency string, statuses []string) (decimal.Decimal, error)
 	GetOrCreateBalanceAccountForUpdate(resellerID uint, currency string) (*models.ResellerBalanceAccount, error)
+	ListBalanceAccounts(filter ResellerBalanceAccountListFilter) ([]models.ResellerBalanceAccount, int64, error)
 	UpdateBalanceAccount(account *models.ResellerBalanceAccount) error
 	ListAvailableLedgerEntriesForUpdate(resellerID uint, currency string) ([]models.ResellerLedgerEntry, error)
 	UpdateLedgerEntry(entry *models.ResellerLedgerEntry) error
@@ -469,6 +470,31 @@ func (r *GormResellerRepository) GetOrCreateBalanceAccountForUpdate(resellerID u
 		return nil, err
 	}
 	return &row, nil
+}
+
+// ListBalanceAccounts 分页列出分销商余额账户。
+func (r *GormResellerRepository) ListBalanceAccounts(filter ResellerBalanceAccountListFilter) ([]models.ResellerBalanceAccount, int64, error) {
+	rows := make([]models.ResellerBalanceAccount, 0)
+	query := r.db.Model(&models.ResellerBalanceAccount{})
+	if filter.ResellerID != 0 {
+		query = query.Where("reseller_id = ?", filter.ResellerID)
+	}
+	if currency := strings.TrimSpace(filter.Currency); currency != "" {
+		query = query.Where("currency = ?", currency)
+	}
+	if status := strings.TrimSpace(filter.Status); status != "" {
+		query = query.Where("status = ?", status)
+	}
+	var total int64
+	if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := applyPagination(query.Session(&gorm.Session{}), filter.Page, filter.PageSize).
+		Order("currency ASC, id DESC").
+		Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
 }
 
 // UpdateBalanceAccount 更新分销余额账户缓存。

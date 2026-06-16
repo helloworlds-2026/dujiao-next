@@ -112,6 +112,15 @@ type ResellerAdminBalanceAccountListFilter struct {
 	Status     string
 }
 
+// ResellerBalanceAccountListFilter 分销商余额账户过滤条件。
+type ResellerBalanceAccountListFilter struct {
+	Page       int
+	PageSize   int
+	ResellerID uint
+	Currency   string
+	Status     string
+}
+
 // ResellerWithdrawListFilter 分销商提现申请过滤条件。
 type ResellerWithdrawListFilter struct {
 	Page       int

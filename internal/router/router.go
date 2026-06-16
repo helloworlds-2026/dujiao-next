@@ -179,6 +179,11 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 			user.GET("/affiliate/commissions", publicHandler.ListAffiliateCommissions)
 			user.GET("/affiliate/withdraws", publicHandler.ListAffiliateWithdraws)
 			user.POST("/affiliate/withdraws", publicHandler.ApplyAffiliateWithdraw)
+			user.GET("/reseller/dashboard", publicHandler.GetResellerDashboard)
+			user.GET("/reseller/balance-accounts", publicHandler.ListResellerBalanceAccounts)
+			user.GET("/reseller/ledger-entries", publicHandler.ListResellerLedgerEntries)
+			user.GET("/reseller/withdraws", publicHandler.ListResellerWithdraws)
+			user.POST("/reseller/withdraws", publicHandler.ApplyResellerWithdraw)
 
 			// API 对接权限（用户中心）
 			user.GET("/api-credential", publicHandler.GetMyApiCredential)

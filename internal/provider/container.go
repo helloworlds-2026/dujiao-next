@@ -242,7 +242,7 @@ func (c *Container) initServices() {
 	c.ResellerSiteConfigService = service.NewResellerSiteConfigService(c.ResellerRepo)
 	c.ResellerProductSettingService = service.NewResellerProductSettingService(c.ResellerProductSettingRepo, c.ResellerRepo, c.ProductRepo)
 	c.ResellerAccountingService = service.NewResellerAccountingService(c.ResellerRepo, service.ResellerAccountingOptions{
-		ConfirmDays: 7,
+		ConfirmDays: c.Config.Reseller.SettlementConfirmDays,
 	})
 	c.ResellerOrderService = service.NewResellerOrderService(c.ResellerRepo)
 	c.ResellerOperationsService = service.NewResellerOperationsService(c.ResellerOperationsRepo)

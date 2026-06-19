@@ -15,12 +15,12 @@ import (
 
 var userResellerFinanceErrorRules = []mappedHandlerError{
 	{target: service.ErrResellerNotOpened, code: response.CodeBadRequest, key: "error.bad_request"},
-	{target: service.ErrResellerProfileInactive, code: response.CodeBadRequest, key: "error.forbidden"},
-	{target: service.ErrResellerSettlementUnavailable, code: response.CodeBadRequest, key: "error.forbidden"},
-	{target: service.ErrResellerWithdrawAmountInvalid, code: response.CodeBadRequest, key: "error.bad_request"},
-	{target: service.ErrResellerWithdrawCurrencyUnavailable, code: response.CodeBadRequest, key: "error.bad_request"},
-	{target: service.ErrResellerWithdrawInsufficient, code: response.CodeBadRequest, key: "error.bad_request"},
-	{target: service.ErrResellerBalanceAccountFrozen, code: response.CodeBadRequest, key: "error.forbidden"},
+	{target: service.ErrResellerProfileInactive, code: response.CodeBadRequest, key: "error.reseller_profile_inactive"},
+	{target: service.ErrResellerSettlementUnavailable, code: response.CodeBadRequest, key: "error.reseller_settlement_unavailable"},
+	{target: service.ErrResellerWithdrawAmountInvalid, code: response.CodeBadRequest, key: "error.reseller_withdraw_amount_invalid"},
+	{target: service.ErrResellerWithdrawCurrencyUnavailable, code: response.CodeBadRequest, key: "error.reseller_withdraw_currency_unavailable"},
+	{target: service.ErrResellerWithdrawInsufficient, code: response.CodeBadRequest, key: "error.reseller_withdraw_insufficient"},
+	{target: service.ErrResellerBalanceAccountFrozen, code: response.CodeBadRequest, key: "error.reseller_balance_frozen"},
 }
 
 var userResellerManagementErrorRules = []mappedHandlerError{

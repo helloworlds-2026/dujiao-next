@@ -99,9 +99,13 @@ type ResellerUserWithdrawListFilter struct {
 }
 
 func NewResellerAccountingService(repo repository.ResellerRepository, opts ResellerAccountingOptions) *ResellerAccountingService {
+	const maxConfirmDays = 3650
 	days := opts.ConfirmDays
 	if days < 0 {
 		days = 0
+	}
+	if days > maxConfirmDays {
+		days = maxConfirmDays
 	}
 	return &ResellerAccountingService{repo: repo, confirmDays: days}
 }
@@ -350,7 +354,31 @@ func (s *ResellerAccountingService) ConfirmDueLedgerEntries(now time.Time) (int6
 	if s == nil || s.repo == nil {
 		return 0, nil
 	}
-	return s.repo.MarkDueLedgerEntriesAvailable(now)
+	var affected int64
+	err := s.repo.Transaction(func(tx *gorm.DB) error {
+		repoTx := s.repo.WithTx(tx)
+		// 先采集到期流水涉及的账户维度（UPDATE 后这些行将不再是 pending_confirm）。
+		scopes, err := repoTx.ListDueLedgerScopes(now)
+		if err != nil {
+			return err
+		}
+		marked, err := repoTx.MarkDueLedgerEntriesAvailable(now)
+		if err != nil {
+			return err
+		}
+		affected = marked
+		// 到期确认后同步刷新余额缓存，否则 dashboard 的可用余额会长期停留在确认前的旧值。
+		for _, scope := range scopes {
+			if err := s.refreshBalanceAccountTx(repoTx, scope.ResellerID, scope.Currency, now); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return affected, nil
 }
 
 type resellerRefundAllocationItem struct {
@@ -475,13 +503,36 @@ func (s *ResellerAccountingService) HandleRefundDeductTx(tx *gorm.DB, order *mod
 	}
 	now := time.Now()
 	orderID := order.ID
+
+	// 退款扣减的入账状态必须与对应订单利润流水保持一致：
+	// 若利润仍处于待确认（pending_confirm）尚未到账，扣减流水也应保持 pending_confirm，
+	// 并沿用同一到账时间，使其与利润在确认时同步转为可用，
+	// 避免未到账利润被扣成「可用负余额」而误将账户标记为 negative_balance 冻结提现，
+	// 同时防止把退款错误地从其它已到账订单的可用余额中扣除。
+	deductStatus := models.ResellerLedgerStatusAvailable
+	var deductAvailableAt *time.Time
+	profitEntry, err := repoTx.GetLedgerEntryByIdempotencyKey(fmt.Sprintf("order_profit:%d", order.ID))
+	if err != nil {
+		return err
+	}
+	if profitEntry != nil && profitEntry.Status == models.ResellerLedgerStatusPendingConfirm {
+		deductStatus = models.ResellerLedgerStatusPendingConfirm
+		if profitEntry.AvailableAt != nil {
+			deductAvailableAt = profitEntry.AvailableAt
+		} else {
+			at := now.AddDate(0, 0, s.confirmDays)
+			deductAvailableAt = &at
+		}
+	}
+
 	entry := &models.ResellerLedgerEntry{
-		ResellerID: snapshot.ResellerID,
-		OrderID:    &orderID,
-		Type:       models.ResellerLedgerTypeRefundDeduct,
-		Amount:     models.NewMoneyFromDecimal(deduct.Neg()),
-		Currency:   strings.TrimSpace(snapshot.Currency),
-		Status:     models.ResellerLedgerStatusAvailable,
+		ResellerID:  snapshot.ResellerID,
+		OrderID:     &orderID,
+		Type:        models.ResellerLedgerTypeRefundDeduct,
+		Amount:      models.NewMoneyFromDecimal(deduct.Neg()),
+		Currency:    strings.TrimSpace(snapshot.Currency),
+		Status:      deductStatus,
+		AvailableAt: deductAvailableAt,
 		MetadataJSON: models.JSON{
 			"refund_record_id":       refundRecord.ID,
 			"refund_type":            refundRecord.Type,
@@ -489,6 +540,7 @@ func (s *ResellerAccountingService) HandleRefundDeductTx(tx *gorm.DB, order *mod
 			"refunded_before":        refundedBefore.Round(2).StringFixed(2),
 			"refund_allocation_json": allocation,
 			"snapshot_id":            snapshot.ID,
+			"deduct_status":          deductStatus,
 		},
 		IdempotencyKey: fmt.Sprintf("refund_deduct:%d", refundRecord.ID),
 		CreatedAt:      now,
@@ -693,14 +745,15 @@ func (s *ResellerAccountingService) refreshBalanceAccountTx(repo repository.Rese
 	if err != nil {
 		return err
 	}
-	available, err := repo.SumLedgerAmount(resellerID, currency, []string{models.ResellerLedgerStatusAvailable})
+	sums, err := repo.SumLedgerAmountGroupedByStatus(resellerID, currency, []string{
+		models.ResellerLedgerStatusAvailable,
+		models.ResellerLedgerStatusLocked,
+	})
 	if err != nil {
 		return err
 	}
-	locked, err := repo.SumLedgerAmount(resellerID, currency, []string{models.ResellerLedgerStatusLocked})
-	if err != nil {
-		return err
-	}
+	available := sums[models.ResellerLedgerStatusAvailable]
+	locked := sums[models.ResellerLedgerStatusLocked]
 	net := available.Round(2)
 	negative := decimal.Zero
 	if net.LessThan(decimal.Zero) {

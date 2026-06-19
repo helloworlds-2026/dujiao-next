@@ -44,8 +44,10 @@ type ResellerRepository interface {
 	CreateLedgerEntryIfNotExists(entry *models.ResellerLedgerEntry) (bool, error)
 	GetLedgerEntryByIdempotencyKey(key string) (*models.ResellerLedgerEntry, error)
 	MarkDueLedgerEntriesAvailable(now time.Time) (int64, error)
+	ListDueLedgerScopes(now time.Time) ([]ResellerLedgerScope, error)
 	ListLedgerEntries(filter ResellerLedgerListFilter) ([]models.ResellerLedgerEntry, int64, error)
 	SumLedgerAmount(resellerID uint, currency string, statuses []string) (decimal.Decimal, error)
+	SumLedgerAmountGroupedByStatus(resellerID uint, currency string, statuses []string) (map[string]decimal.Decimal, error)
 	GetOrCreateBalanceAccountForUpdate(resellerID uint, currency string) (*models.ResellerBalanceAccount, error)
 	ListBalanceAccounts(filter ResellerBalanceAccountListFilter) ([]models.ResellerBalanceAccount, int64, error)
 	UpdateBalanceAccount(account *models.ResellerBalanceAccount) error
@@ -783,6 +785,26 @@ func (r *GormResellerRepository) MarkDueLedgerEntriesAvailable(now time.Time) (i
 	return res.RowsAffected, res.Error
 }
 
+// ResellerLedgerScope 表示分销商 + 币种的账户维度，用于到期确认后定位需要刷新的余额账户。
+type ResellerLedgerScope struct {
+	ResellerID uint
+	Currency   string
+}
+
+// ListDueLedgerScopes 列出到期待确认流水涉及的分销商与币种组合。
+func (r *GormResellerRepository) ListDueLedgerScopes(now time.Time) ([]ResellerLedgerScope, error) {
+	scopes := make([]ResellerLedgerScope, 0)
+	err := r.db.Model(&models.ResellerLedgerEntry{}).
+		Where("status = ? AND available_at IS NOT NULL AND available_at <= ?", models.ResellerLedgerStatusPendingConfirm, now).
+		Group("reseller_id, currency").
+		Select("reseller_id, currency").
+		Scan(&scopes).Error
+	if err != nil {
+		return nil, err
+	}
+	return scopes, nil
+}
+
 // ListLedgerEntries 分页列出分销账务流水。
 func (r *GormResellerRepository) ListLedgerEntries(filter ResellerLedgerListFilter) ([]models.ResellerLedgerEntry, int64, error) {
 	rows := make([]models.ResellerLedgerEntry, 0)
@@ -829,6 +851,32 @@ func (r *GormResellerRepository) SumLedgerAmount(resellerID uint, currency strin
 		return decimal.Zero, err
 	}
 	return total.Round(2), nil
+}
+
+// SumLedgerAmountGroupedByStatus 一次性按状态分组汇总分销账务金额，避免逐状态多次查询。
+func (r *GormResellerRepository) SumLedgerAmountGroupedByStatus(resellerID uint, currency string, statuses []string) (map[string]decimal.Decimal, error) {
+	currency = strings.TrimSpace(currency)
+	result := make(map[string]decimal.Decimal, len(statuses))
+	if resellerID == 0 || currency == "" || len(statuses) == 0 {
+		return result, nil
+	}
+	type sumRow struct {
+		Status string
+		Total  decimal.Decimal
+	}
+	var rows []sumRow
+	err := r.db.Model(&models.ResellerLedgerEntry{}).
+		Where("reseller_id = ? AND currency = ? AND status IN ?", resellerID, currency, statuses).
+		Group("status").
+		Select("status, COALESCE(SUM(amount), 0) AS total").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		result[row.Status] = row.Total.Round(2)
+	}
+	return result, nil
 }
 
 // GetOrCreateBalanceAccountForUpdate 获取或创建并锁定同币种余额账户。

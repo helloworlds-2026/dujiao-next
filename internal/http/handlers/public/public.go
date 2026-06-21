@@ -176,6 +176,12 @@ func (h *Handler) GetConfig(c *gin.Context) {
 		if enableGuestOrders, ok := accessConfigVal["enable_guest_orders"]; ok {
 			data["enable_guest_orders"] = enableGuestOrders
 		}
+		if disableAffiliate, ok := accessConfigVal["disable_affiliate"]; ok {
+			data["disable_affiliate"] = disableAffiliate
+		}
+		if disableAPI, ok := accessConfigVal["disable_api"]; ok {
+			data["disable_api"] = disableAPI
+		}
 	}
 	if h.CaptchaService != nil {
 		publicCaptcha, captchaErr := h.CaptchaService.GetPublicSetting()

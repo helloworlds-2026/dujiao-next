@@ -204,6 +204,20 @@ const (
 	ProductStockStatusOutOfStock = "out_of_stock"
 )
 
+// 公开库存展示模式与档位常量
+const (
+	ProductStockDisplayExact  = "exact"
+	ProductStockDisplayStatus = "status"
+	ProductStockDisplayRange  = "range"
+	ProductStockDisplayHidden = "hidden"
+
+	ProductStockDisplayRange1To5    = "range_1_5"
+	ProductStockDisplayRange6To20   = "range_6_20"
+	ProductStockDisplayRange21To50  = "range_21_50"
+	ProductStockDisplayRange51To100 = "range_51_100"
+	ProductStockDisplayRange100Plus = "range_100_plus"
+)
+
 // 手动库存常量
 const (
 	ManualStockUnlimited = -1
@@ -325,6 +339,7 @@ const (
 	TaskWalletRechargeExpire        = "wallet_recharge:timeout_expire"
 	TaskNotificationDispatch        = "notification:dispatch"
 	TaskAffiliateConfirmCommissions = "affiliate:confirm_commissions"
+	TaskResellerConfirmLedger       = "reseller:confirm_ledger"
 	TaskProcurementSubmit           = "procurement:submit"
 	TaskProcurementPollStatus       = "procurement:poll_status"
 	TaskProcurementSyncAccepted     = "procurement:sync_accepted"
@@ -421,6 +436,7 @@ const (
 	SettingKeyTelegramBotRuntimeStatus = "telegram_bot_runtime_status"
 	SettingKeyOrderEmailTemplateConfig = "order_email_template_config"
 	SettingFieldSiteCurrency           = "currency"
+	SettingFieldStorefrontTemplate     = "storefront_template"
 	SettingFieldPaymentExpireMinutes   = "payment_expire_minutes"
 
 	SettingKeyNavConfig    = "nav_config"
@@ -460,6 +476,13 @@ const (
 // 币种常量
 const (
 	SiteCurrencyDefault = "CNY"
+)
+
+// 店面模板常量（站长全局选择的用户前台模板）
+const (
+	StorefrontTemplateClassic = "classic"
+	StorefrontTemplateVault   = "vault"
+	StorefrontTemplateDefault = StorefrontTemplateClassic
 )
 
 // 站点语言常量

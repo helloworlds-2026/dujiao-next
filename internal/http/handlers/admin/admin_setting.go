@@ -64,7 +64,10 @@ func (h *Handler) UpdateSettings(c *gin.Context) {
 		_ = cache.DelAllPublicConfig(c.Request.Context())
 	}
 	if req.Key == constants.SettingKeyAccessConfig {
-		_ = cache.Del(c.Request.Context(), publicConfigCacheKey)
+		_ = cache.DelAllPublicConfig(c.Request.Context())
+	}
+	if req.Key == constants.SettingKeyCallbackRoutesConfig {
+		h.SettingService.InvalidateCallbackRoutesCache()
 	}
 	response.Success(c, value)
 }

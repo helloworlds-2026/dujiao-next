@@ -126,7 +126,7 @@ func TestRequireMainTenantForResellerConsoleBlocksResellerTenant(t *testing.T) {
 		c.Request = c.Request.WithContext(service.WithTenantContext(c.Request.Context(), tenant))
 		c.Next()
 	})
-	r.GET("/api/v1/user/reseller/profile", RequireMainTenantForResellerConsole(), func(c *gin.Context) {
+	r.GET("/api/v1/user/reseller/profile", RequireMainTenantForResellerConsole(nil), func(c *gin.Context) {
 		c.String(http.StatusOK, "should not run")
 	})
 
@@ -153,7 +153,7 @@ func TestRequireMainTenantForResellerConsoleAllowsMainTenant(t *testing.T) {
 		c.Request = c.Request.WithContext(service.WithTenantContext(c.Request.Context(), tenant))
 		c.Next()
 	})
-	r.GET("/api/v1/user/reseller/profile", RequireMainTenantForResellerConsole(), func(c *gin.Context) {
+	r.GET("/api/v1/user/reseller/profile", RequireMainTenantForResellerConsole(nil), func(c *gin.Context) {
 		c.String(http.StatusOK, "ok")
 	})
 

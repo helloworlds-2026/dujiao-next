@@ -64,6 +64,8 @@ func normalizeSettingValueByKey(key string, value map[string]interface{}) models
 		return normalizeCallbackRoutesSetting(value)
 	case constants.SettingKeyHomeAnnouncement:
 		return normalizeHomeAnnouncement(value)
+	case constants.SettingKeyAccessConfig:
+		return normalizeAccessConfig(value)
 	default:
 		return models.JSON(value)
 	}
@@ -92,6 +94,17 @@ func normalizeSiteSetting(value map[string]interface{}) models.JSON {
 	}
 
 	return normalized
+}
+
+// normalizeAccessConfig 归一化访问控制配置。
+func normalizeAccessConfig(value map[string]interface{}) models.JSON {
+	return models.JSON{
+		"require_login":              parseSettingBool(value["require_login"]),
+		"enable_guest_orders":      parseSettingBool(value["enable_guest_orders"]),
+		"disable_affiliate":          parseSettingBool(value["disable_affiliate"]),
+		"disable_api":                parseSettingBool(value["disable_api"]),
+		"disable_reseller_console":   parseSettingBool(value["disable_reseller_console"]),
+	}
 }
 
 func normalizeSiteScripts(raw interface{}) []interface{} {

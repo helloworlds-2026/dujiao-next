@@ -98,7 +98,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 			public.GET("/banners", publicHandler.GetPublicBanners)
 			public.GET("/categories", publicHandler.GetCategories)
 			public.GET("/captcha/image", publicHandler.GetImageCaptcha)
-			public.POST("/affiliate/click", publicHandler.TrackAffiliateClick)
+			public.POST("/affiliate/click", DenyWhenAffiliateDisabled(c.SettingService), publicHandler.TrackAffiliateClick)
 			public.GET("/member-levels", publicHandler.GetPublicMemberLevels)
 		}
 
@@ -175,13 +175,13 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 			user.GET("/wallet/recharges/:recharge_no", publicHandler.GetMyWalletRecharge)
 			user.POST("/wallet/recharge/payments/:id/capture", publicHandler.CaptureMyWalletRechargePayment)
 			user.POST("/gift-cards/redeem", publicHandler.RedeemGiftCard)
-			user.POST("/affiliate/open", publicHandler.OpenAffiliate)
-			user.GET("/affiliate/dashboard", publicHandler.GetAffiliateDashboard)
-			user.GET("/affiliate/commissions", publicHandler.ListAffiliateCommissions)
-			user.GET("/affiliate/withdraws", publicHandler.ListAffiliateWithdraws)
-			user.POST("/affiliate/withdraws", publicHandler.ApplyAffiliateWithdraw)
+			user.POST("/affiliate/open", DenyWhenAffiliateDisabled(c.SettingService), publicHandler.OpenAffiliate)
+			user.GET("/affiliate/dashboard", DenyWhenAffiliateDisabled(c.SettingService), publicHandler.GetAffiliateDashboard)
+			user.GET("/affiliate/commissions", DenyWhenAffiliateDisabled(c.SettingService), publicHandler.ListAffiliateCommissions)
+			user.GET("/affiliate/withdraws", DenyWhenAffiliateDisabled(c.SettingService), publicHandler.ListAffiliateWithdraws)
+			user.POST("/affiliate/withdraws", DenyWhenAffiliateDisabled(c.SettingService), publicHandler.ApplyAffiliateWithdraw)
 			resellerConsole := user.Group("/reseller")
-			resellerConsole.Use(RequireMainTenantForResellerConsole())
+			resellerConsole.Use(RequireMainTenantForResellerConsole(c.SettingService))
 			{
 				resellerConsole.GET("/profile", publicHandler.GetResellerManagementSnapshot)
 				resellerConsole.POST("/apply", publicHandler.ApplyResellerProfile)
@@ -206,10 +206,10 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 			}
 
 			// API 对接权限（用户中心）
-			user.GET("/api-credential", publicHandler.GetMyApiCredential)
-			user.POST("/api-credential/apply", publicHandler.ApplyApiCredential)
-			user.POST("/api-credential/regenerate", publicHandler.RegenerateMyApiCredential)
-			user.PUT("/api-credential/status", publicHandler.UpdateMyApiCredentialStatus)
+			user.GET("/api-credential", DenyWhenApiDisabled(c.SettingService), publicHandler.GetMyApiCredential)
+			user.POST("/api-credential/apply", DenyWhenApiDisabled(c.SettingService), publicHandler.ApplyApiCredential)
+			user.POST("/api-credential/regenerate", DenyWhenApiDisabled(c.SettingService), publicHandler.RegenerateMyApiCredential)
+			user.PUT("/api-credential/status", DenyWhenApiDisabled(c.SettingService), publicHandler.UpdateMyApiCredentialStatus)
 		}
 
 		// 上游 API（本站作为 B 站点，暴露给下游 A 调用）

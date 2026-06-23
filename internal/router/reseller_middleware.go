@@ -36,8 +36,14 @@ func ResellerTenantMiddleware(resolver ResellerTenantResolver) gin.HandlerFunc {
 	}
 }
 
-func RequireMainTenantForResellerConsole() gin.HandlerFunc {
+func RequireMainTenantForResellerConsole(settingService *service.SettingService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if settingService != nil && settingService.GetDisableResellerConsole() {
+			msg := i18n.T(i18n.ResolveLocale(c), "error.forbidden")
+			response.Forbidden(c, msg)
+			c.Abort()
+			return
+		}
 		tenant, ok := service.TenantFromContext(c.Request.Context())
 		if ok && tenant.ResellerID != nil && !tenant.IsMain && !tenant.Unavailable {
 			msg := i18n.T(i18n.ResolveLocale(c), "error.forbidden")

@@ -464,3 +464,33 @@ func (s *SettingService) GetWalletRechargeChannelIDs() []uint {
 	}
 	return result
 }
+
+func (s *SettingService) getAccessConfigBool(field string) bool {
+	if s == nil {
+		return false
+	}
+	value, err := s.GetByKey(constants.SettingKeyAccessConfig)
+	if err != nil || value == nil {
+		return false
+	}
+	raw, ok := value[field]
+	if !ok {
+		return false
+	}
+	return parseSettingBool(raw)
+}
+
+// GetDisableAffiliate 是否关闭推广返利。
+func (s *SettingService) GetDisableAffiliate() bool {
+	return s.getAccessConfigBool("disable_affiliate")
+}
+
+// GetDisableAPI 是否关闭 API 对接。
+func (s *SettingService) GetDisableAPI() bool {
+	return s.getAccessConfigBool("disable_api")
+}
+
+// GetDisableResellerConsole 是否关闭分销中心。
+func (s *SettingService) GetDisableResellerConsole() bool {
+	return s.getAccessConfigBool("disable_reseller_console")
+}

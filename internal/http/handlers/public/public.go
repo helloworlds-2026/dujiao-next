@@ -355,6 +355,9 @@ func (h *Handler) GetConfig(c *gin.Context) {
 		if disableAPI, ok := accessConfigVal["disable_api"]; ok {
 			data["disable_api"] = disableAPI
 		}
+		if disableResellerConsole, ok := accessConfigVal["disable_reseller_console"]; ok {
+			data["disable_reseller_console"] = disableResellerConsole
+		}
 	}
 	if h.CaptchaService != nil {
 		publicCaptcha, captchaErr := h.CaptchaService.GetPublicSetting()
